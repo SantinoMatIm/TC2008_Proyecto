@@ -17,10 +17,30 @@ class Car(Agent):
         super().__init__(unique_id, model)
 
     def move(self):
-        """ 
+        """
         Determines if the agent can move in the direction that was chosen
-        """        
-        self.model.grid.move_to_empty(self)
+        """
+        # Get current position
+        x, y = self.pos
+
+        # Get neighbors
+        neighbors = self.model.grid.get_neighborhood(self.pos, moore=True, include_center=False)
+
+        # Find empty cells (only road cells without cars)
+        possible_moves = []
+        for neighbor in neighbors:
+            cell_contents = self.model.grid.get_cell_list_contents([neighbor])
+            # Check if cell has road and no other car
+            has_road = any(isinstance(agent, Road) for agent in cell_contents)
+            has_car = any(isinstance(agent, Car) for agent in cell_contents)
+            if has_road and not has_car:
+                possible_moves.append(neighbor)
+
+        # Move to random empty road cell if available
+        if possible_moves:
+            import random
+            new_position = random.choice(possible_moves)
+            self.model.grid.move_agent(self, new_position)
 
     def step(self):
         """ 

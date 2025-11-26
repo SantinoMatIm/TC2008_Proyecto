@@ -1,76 +1,193 @@
 # TC2008B. Sistemas Multiagentes y Gráficas Computacionales
-# Python flask server to interact with Unity. Based on the code provided by Sergio Ruiz.
-# Octavio Navarro. October 2023 
+# Python flask server to interact with WebGL.
+# Octavio Navarro. October 2023
 
 from flask import Flask, request, jsonify
-#from randomAgents.model import RandomModel
-#from randomAgents.agent import RandomAgent, ObstacleAgent
+from flask_cors import CORS, cross_origin
 from trafficBase.model import CityModel
-from trafficBase.agent import Road, Traffic_Light, Obstacle, Destination
+from trafficBase.agent import Road, Traffic_Light, Obstacle, Destination, Car
+import os
 
 # Size of the board:
 number_agents = 10
-width = 28
-height = 28
-randomModel = None
+cityModel = None
 currentStep = 0
 
-# This application will be used to interact with Unity
+# This application will be used to interact with WebGL
 app = Flask("Traffic example")
+cors = CORS(app, origins=['http://localhost'])
 
 # This route will be used to send the parameters of the simulation to the server.
-# The servers expects a POST request with the parameters in a form.
-@app.route('/init', methods=['POST'])
+@app.route('/init', methods=['GET', 'POST'])
+@cross_origin()
 def initModel():
-    global currentStep, randomModel, number_agents, width, height
+    global currentStep, cityModel, number_agents
 
     if request.method == 'POST':
-        number_agents = int(request.form.get('NAgents'))
-        currentStep = 0
+        try:
+            number_agents = int(request.json.get('NAgents'))
+            currentStep = 0
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error initializing the model"}), 500
 
-        print(request.form)
+    print(f"Model parameters: {number_agents} agents")
 
-        # Create the model using the parameters sent by Unity
-        randomModel = CityModel(number_agents)
+    # Create the model using the parameters sent by the application
+    cityModel = CityModel(number_agents)
 
-        # Return a message to Unity saying that the model was created successfully
-        return jsonify({"message":"Parameters recieved, model initiated."})
+    # Return a message saying that the model was created successfully
+    return jsonify({"message": f"Parameters received, model initiated.\nAgents: {number_agents}"})
 
-# This route will be used to get the positions of the agents
-#@app.route('/getAgents', methods=['GET'])
-#def getAgents():
-    #global randomModel
 
-    #if request.method == 'GET':
-        ## Get the positions of the agents and return them to Unity in JSON format.
-        ## Note that the positions are sent as a list of dictionaries, where each dictionary has the id and position of an agent.
-        ## The y coordinate is set to 1, since the agents are in a 3D world. The z coordinate corresponds to the row (y coordinate) of the grid in mesa.
-        #agentPositions = [{"id": str(a.unique_id), "x": x, "y":1, "z":z} for a, (x, z) in randomModel.grid.coord_iter() if isinstance(a, RandomAgent)]
+# This route will be used to get the positions of the traffic lights
+@app.route('/getTrafficLights', methods=['GET'])
+@cross_origin()
+def getTrafficLights():
+    global cityModel
 
-        #return jsonify({'positions':agentPositions})
+    if request.method == 'GET':
+        try:
+            # Get all traffic lights from the grid
+            trafficLightPositions = []
+            for agents, (x, z) in cityModel.grid.coord_iter():
+                for agent in agents:
+                    if isinstance(agent, Traffic_Light):
+                        trafficLightPositions.append({
+                            "id": str(agent.unique_id),
+                            "x": x,
+                            "y": 1,
+                            "z": z,
+                            "state": agent.state  # True = green, False = red
+                        })
 
-## This route will be used to get the positions of the obstacles
-#@app.route('/getObstacles', methods=['GET'])
-#def getObstacles():
-    #global randomModel
+            return jsonify({'positions': trafficLightPositions})
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error with traffic light positions"}), 500
 
-    #if request.method == 'GET':
-        ## Get the positions of the obstacles and return them to Unity in JSON format.
-        ## Same as before, the positions are sent as a list of dictionaries, where each dictionary has the id and position of an obstacle.
-        #carPositions = [{"id": str(a.unique_id), "x": x, "y":1, "z":z} for a, (x, z) in randomModel.grid.coord_iter() if isinstance(a, ObstacleAgent)]
 
-        #return jsonify({'positions':carPositions})
+# This route will be used to get the positions of the obstacles (buildings)
+@app.route('/getObstacles', methods=['GET'])
+@cross_origin()
+def getObstacles():
+    global cityModel
 
-## This route will be used to update the model
-#@app.route('/update', methods=['GET'])
-#def updateModel():
-    #global currentStep, randomModel
-    #if request.method == 'GET':
-        ## Update the model and return a message to Unity saying that the model was updated successfully
-        #randomModel.step()
-        #currentStep += 1
-        #return jsonify({'message':f'Model updated to step {currentStep}.', 'currentStep':currentStep})
+    if request.method == 'GET':
+        try:
+            # Get all obstacles from the grid
+            obstaclePositions = []
+            for agents, (x, z) in cityModel.grid.coord_iter():
+                for agent in agents:
+                    if isinstance(agent, Obstacle):
+                        obstaclePositions.append({
+                            "id": str(agent.unique_id),
+                            "x": x,
+                            "y": 1,
+                            "z": z
+                        })
 
-if __name__=='__main__':
+            return jsonify({'positions': obstaclePositions})
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error with obstacle positions"}), 500
+
+
+# This route will be used to get the positions of the destinations
+@app.route('/getDestinations', methods=['GET'])
+@cross_origin()
+def getDestinations():
+    global cityModel
+
+    if request.method == 'GET':
+        try:
+            # Get all destinations from the grid
+            destinationPositions = []
+            for agents, (x, z) in cityModel.grid.coord_iter():
+                for agent in agents:
+                    if isinstance(agent, Destination):
+                        destinationPositions.append({
+                            "id": str(agent.unique_id),
+                            "x": x,
+                            "y": 1,
+                            "z": z
+                        })
+
+            return jsonify({'positions': destinationPositions})
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error with destination positions"}), 500
+
+
+# This route will be used to get the positions and directions of the roads
+@app.route('/getRoads', methods=['GET'])
+@cross_origin()
+def getRoads():
+    global cityModel
+
+    if request.method == 'GET':
+        try:
+            # Get all roads from the grid
+            roadPositions = []
+            for agents, (x, z) in cityModel.grid.coord_iter():
+                for agent in agents:
+                    if isinstance(agent, Road):
+                        roadPositions.append({
+                            "id": str(agent.unique_id),
+                            "x": x,
+                            "y": 0,
+                            "z": z,
+                            "direction": agent.direction
+                        })
+
+            return jsonify({'positions': roadPositions})
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error with road positions"}), 500
+
+
+# This route will be used to get the positions of the cars
+@app.route('/getCars', methods=['GET'])
+@cross_origin()
+def getCars():
+    global cityModel
+
+    if request.method == 'GET':
+        try:
+            # Get all cars from the grid
+            carPositions = []
+            for agents, (x, z) in cityModel.grid.coord_iter():
+                for agent in agents:
+                    if isinstance(agent, Car):
+                        carPositions.append({
+                            "id": str(agent.unique_id),
+                            "x": x,
+                            "y": 1,
+                            "z": z
+                        })
+
+            return jsonify({'positions': carPositions})
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error with car positions"}), 500
+
+
+# This route will be used to update the model
+@app.route('/update', methods=['GET'])
+@cross_origin()
+def updateModel():
+    global currentStep, cityModel
+    if request.method == 'GET':
+        try:
+            # Update the model
+            cityModel.step()
+            currentStep += 1
+            return jsonify({'message': f'Model updated to step {currentStep}.', 'currentStep': currentStep})
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error during step."}), 500
+
+
+if __name__ == '__main__':
     # Run the flask server in port 8585
     app.run(host="localhost", port=8585, debug=True)
