@@ -12,7 +12,8 @@ import { M4 } from '../libs/3d-lib';
 import { Scene3D } from '../libs/scene3d';
 import { Object3D } from '../libs/object3d';
 import { Camera3D } from '../libs/camera3d';
-import { cubeSingleColor } from '../libs/shapes';
+import { Light3D } from '../libs/light3d';
+import { cubeFaceColors } from '../libs/shapes';
 
 // Functions and arrays for the communication with the API
 import {
@@ -22,8 +23,8 @@ import {
 } from '../libs/api_connection_traffic.js';
 
 // Define the shader code, using GLSL 3.00
-import vsGLSL from '../assets/shaders/vs_color.glsl?raw';
-import fsGLSL from '../assets/shaders/fs_color.glsl?raw';
+import vsGLSL from '../assets/shaders/vs_phong.glsl?raw';
+import fsGLSL from '../assets/shaders/fs_phong.glsl?raw';
 
 const scene = new Scene3D();
 
@@ -81,112 +82,103 @@ function setupScene() {
   camera.panOffset = [0, 12, 0];
   scene.setCamera(camera);
   scene.camera.setupControls();
+
+  // Create a sun (directional light)
+  const sun = new Light3D(
+    0,
+    [15, 30, 15],                           // Position high in the sky
+    [0.3, 0.3, 0.3, 1.0],                   // Ambient light (soft gray)
+    [1.0, 0.95, 0.8, 1.0],                  // Diffuse light (warm sunlight)
+    [1.0, 1.0, 1.0, 1.0]                    // Specular light (white highlights)
+  );
+  scene.addLight(sun);
 }
 
 function setupObjects(scene, gl, programInfo) {
-  // Create cubes with specific colors for each element type
-
-  // Road cube (dark gray)
-  const roadObj = new Object3D(-100);
-  roadObj.arrays = cubeSingleColor(1, [0.3, 0.3, 0.3, 1]);
-  roadObj.bufferInfo = twgl.createBufferInfoFromArrays(gl, roadObj.arrays);
-  roadObj.vao = twgl.createVAOFromBufferInfo(gl, programInfo, roadObj.bufferInfo);
-
-  // Building cube (gray-blue)
-  const buildingObj = new Object3D(-101);
-  buildingObj.arrays = cubeSingleColor(1, [0.5, 0.5, 0.6, 1.0]);
-  buildingObj.bufferInfo = twgl.createBufferInfoFromArrays(gl, buildingObj.arrays);
-  buildingObj.vao = twgl.createVAOFromBufferInfo(gl, programInfo, buildingObj.bufferInfo);
-
-  // Traffic light cubes (red and green)
-  const redLightObj = new Object3D(-102);
-  redLightObj.arrays = cubeSingleColor(1, [1.0, 0.0, 0.0, 1.0]);
-  redLightObj.bufferInfo = twgl.createBufferInfoFromArrays(gl, redLightObj.arrays);
-  redLightObj.vao = twgl.createVAOFromBufferInfo(gl, programInfo, redLightObj.bufferInfo);
-
-  const greenLightObj = new Object3D(-103);
-  greenLightObj.arrays = cubeSingleColor(1, [0.0, 1.0, 0.0, 1.0]);
-  greenLightObj.bufferInfo = twgl.createBufferInfoFromArrays(gl, greenLightObj.arrays);
-  greenLightObj.vao = twgl.createVAOFromBufferInfo(gl, programInfo, greenLightObj.bufferInfo);
-
-  // Destination cube (green-cyan)
-  const destObj = new Object3D(-104);
-  destObj.arrays = cubeSingleColor(1, [0.0, 1.0, 0.5, 1.0]);
-  destObj.bufferInfo = twgl.createBufferInfoFromArrays(gl, destObj.arrays);
-  destObj.vao = twgl.createVAOFromBufferInfo(gl, programInfo, destObj.bufferInfo);
-
-  // Car cube (yellow)
-  const carObj = new Object3D(-105);
-  carObj.arrays = cubeSingleColor(1, [1.0, 0.8, 0.0, 1.0]);
-  carObj.bufferInfo = twgl.createBufferInfoFromArrays(gl, carObj.arrays);
-  carObj.vao = twgl.createVAOFromBufferInfo(gl, programInfo, carObj.bufferInfo);
+  // Create base cube with normals (colors will be set via uniforms)
+  const baseCube = new Object3D(-100);
+  baseCube.arrays = cubeFaceColors(1);
+  baseCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, baseCube.arrays);
+  baseCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, baseCube.bufferInfo);
 
   // Setup roads
   for (const road of roads) {
-    road.arrays = roadObj.arrays;
-    road.bufferInfo = roadObj.bufferInfo;
-    road.vao = roadObj.vao;
+    road.arrays = baseCube.arrays;
+    road.bufferInfo = baseCube.bufferInfo;
+    road.vao = baseCube.vao;
     road.scale = { x: 1, y: 0.05, z: 1 };
+    road.color = [0.3, 0.3, 0.3, 1]; // Dark gray
     scene.addObject(road);
   }
 
   // Setup obstacles (buildings)
   for (const obstacle of obstacles) {
-    obstacle.arrays = buildingObj.arrays;
-    obstacle.bufferInfo = buildingObj.bufferInfo;
-    obstacle.vao = buildingObj.vao;
+    obstacle.arrays = baseCube.arrays;
+    obstacle.bufferInfo = baseCube.bufferInfo;
+    obstacle.vao = baseCube.vao;
     obstacle.scale = { x: 0.9, y: 2.5, z: 0.9 };
     obstacle.position.y = 1.25;  // Raise buildings
+    obstacle.color = [0.5, 0.5, 0.6, 1.0]; // Gray-blue
     scene.addObject(obstacle);
   }
 
   // Setup traffic lights
   for (const light of trafficLights) {
+    light.arrays = baseCube.arrays;
+    light.bufferInfo = baseCube.bufferInfo;
+    light.vao = baseCube.vao;
     light.scale = { x: 0.3, y: 0.8, z: 0.3 };
     light.position.y = 0.4;
-    // Assign red or green based on initial state
+    // Set colors based on initial state
     if (light.state) {
-      light.arrays = greenLightObj.arrays;
-      light.bufferInfo = greenLightObj.bufferInfo;
-      light.vao = greenLightObj.vao;
-      light.greenVao = greenLightObj.vao;
-      light.redVao = redLightObj.vao;
+      light.color = [0.0, 1.0, 0.0, 1.0]; // Green
     } else {
-      light.arrays = redLightObj.arrays;
-      light.bufferInfo = redLightObj.bufferInfo;
-      light.vao = redLightObj.vao;
-      light.greenVao = greenLightObj.vao;
-      light.redVao = redLightObj.vao;
+      light.color = [1.0, 0.0, 0.0, 1.0]; // Red
     }
+    light.greenColor = [0.0, 1.0, 0.0, 1.0];
+    light.redColor = [1.0, 0.0, 0.0, 1.0];
     scene.addObject(light);
   }
 
   // Setup destinations
   for (const dest of destinations) {
-    dest.arrays = destObj.arrays;
-    dest.bufferInfo = destObj.bufferInfo;
-    dest.vao = destObj.vao;
+    dest.arrays = baseCube.arrays;
+    dest.bufferInfo = baseCube.bufferInfo;
+    dest.vao = baseCube.vao;
     dest.scale = { x: 0.8, y: 0.1, z: 0.8 };
     dest.position.y = 0.05;
+    dest.color = [0.0, 1.0, 0.5, 1.0]; // Green-cyan
     scene.addObject(dest);
   }
 
   // Setup cars
   for (const car of cars) {
-    car.arrays = carObj.arrays;
-    car.bufferInfo = carObj.bufferInfo;
-    car.vao = carObj.vao;
+    car.arrays = baseCube.arrays;
+    car.bufferInfo = baseCube.bufferInfo;
+    car.vao = baseCube.vao;
     car.scale = { x: 0.4, y: 0.3, z: 0.6 };
     car.position.y = 0.15;
+    car.color = [1.0, 0.8, 0.0, 1.0]; // Yellow
     scene.addObject(car);
   }
+
+  // Create a visual representation of the sun
+  const sun = scene.lights[0];
+  const sunObj = new Object3D(-999);
+  sunObj.arrays = baseCube.arrays;
+  sunObj.bufferInfo = baseCube.bufferInfo;
+  sunObj.vao = baseCube.vao;
+  sunObj.position = sun.position; // Link to sun position
+  sunObj.scale = { x: 3, y: 3, z: 3 };
+  sunObj.color = [1.0, 1.0, 0.0, 1.0]; // Bright yellow
+  scene.addObject(sunObj);
 }
 
 // Draw an object with its corresponding transformations
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
-  // Update traffic light VAO based on state
+  // Update traffic light color based on state
   if (trafficLights.includes(object)) {
-    object.vao = object.state ? object.greenVao : object.redVao;
+    object.color = object.state ? object.greenColor : object.redColor;
   }
 
   // Prepare the vector for translation and scale
@@ -210,13 +202,31 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 
   object.matrix = transforms;
 
-  // Apply the projection to the final matrix for the
-  // World-View-Projection
-  const wvpMat = M4.multiply(viewProjectionMatrix, transforms);
+  // Calculate matrices for Phong lighting
+  const worldMatrix = transforms;
+  const worldViewProjectionMatrix = M4.multiply(viewProjectionMatrix, transforms);
+  const worldInverseTranspose = M4.transpose(M4.inverse(worldMatrix));
 
-  // Model uniforms
+  // Get light from scene (the sun)
+  const sun = scene.lights[0];
+
+  // Model uniforms for Phong shading
   let objectUniforms = {
-    u_transforms: wvpMat
+    // Scene uniforms
+    u_lightWorldPosition: sun.posArray,
+    u_viewWorldPosition: scene.camera.posArray,
+    u_ambientLight: sun.ambient,
+    u_diffuseLight: sun.diffuse,
+    u_specularLight: sun.specular,
+
+    // Model uniforms
+    u_world: worldMatrix,
+    u_worldInverseTransform: worldInverseTranspose,
+    u_worldViewProjection: worldViewProjectionMatrix,
+    u_ambientColor: object.color,
+    u_diffuseColor: object.color,
+    u_specularColor: [1.0, 1.0, 1.0, 1.0],
+    u_shininess: object.shininess
   }
   twgl.setUniforms(programInfo, objectUniforms);
 
@@ -280,7 +290,15 @@ function setupViewProjection(gl) {
 
 // Setup a ui.
 function setupUI() {
-  // UI can be added here if needed
+  const gui = new GUI();
+
+  // Settings for the light (sun)
+  const sun = scene.lights[0];
+  const lightFolder = gui.addFolder('Sun Light');
+  lightFolder.add(sun.position, 'x', -50, 50).name('Position X');
+  lightFolder.add(sun.position, 'y', 0, 60).name('Position Y (Height)');
+  lightFolder.add(sun.position, 'z', -50, 50).name('Position Z');
+  lightFolder.open();
 }
 
 main();

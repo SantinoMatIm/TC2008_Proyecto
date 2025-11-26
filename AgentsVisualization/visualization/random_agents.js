@@ -16,6 +16,7 @@ import { M4 } from '../libs/3d-lib';
 import { Scene3D } from '../libs/scene3d';
 import { Object3D } from '../libs/object3d';
 import { Camera3D } from '../libs/camera3d';
+import { Light3D } from '../libs/light3d';
 
 // Functions and arrays for the communication with the API
 import {
@@ -24,8 +25,8 @@ import {
 } from '../libs/api_connection.js';
 
 // Define the shader code, using GLSL 3.00
-import vsGLSL from '../assets/shaders/vs_color.glsl?raw';
-import fsGLSL from '../assets/shaders/fs_color.glsl?raw';
+import vsGLSL from '../assets/shaders/vs_phong.glsl?raw';
+import fsGLSL from '../assets/shaders/fs_phong.glsl?raw';
 
 const scene = new Scene3D();
 
@@ -96,6 +97,16 @@ function setupScene() {
   camera.panOffset = [0, 8, 0];
   scene.setCamera(camera);
   scene.camera.setupControls();
+
+  // Create a sun (directional light)
+  const sun = new Light3D(
+    0,
+    [10, 20, 10],                           // Position high in the sky
+    [0.3, 0.3, 0.3, 1.0],                   // Ambient light (soft gray)
+    [1.0, 0.95, 0.8, 1.0],                  // Diffuse light (warm sunlight)
+    [1.0, 1.0, 1.0, 1.0]                    // Specular light (white highlights)
+  );
+  scene.addLight(sun);
 }
 
 function setupObjects(scene, gl, programInfo) {
@@ -133,6 +144,16 @@ function setupObjects(scene, gl, programInfo) {
     scene.addObject(agent);
   }
 
+  // Create a visual representation of the sun
+  const sun = scene.lights[0];
+  const sunVisual = new Object3D(-999, sun.posArray, [0, 0, 0], [2, 2, 2]);
+  sunVisual.arrays = baseCube.arrays;
+  sunVisual.bufferInfo = baseCube.bufferInfo;
+  sunVisual.vao = baseCube.vao;
+  sunVisual.color = [1.0, 1.0, 0.0, 1.0]; // Bright yellow
+  sunVisual.scale = { x: 2, y: 2, z: 2 };
+  scene.addObject(sunVisual);
+
 }
 
 // Draw an object with its corresponding transformations
@@ -168,13 +189,31 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 
   object.matrix = transforms;
 
-  // Apply the projection to the final matrix for the
-  // World-View-Projection
-  const wvpMat = M4.multiply(viewProjectionMatrix, transforms);
+  // Calculate matrices for Phong lighting
+  const worldMatrix = transforms;
+  const worldViewProjectionMatrix = M4.multiply(viewProjectionMatrix, transforms);
+  const worldInverseTranspose = M4.transpose(M4.inverse(worldMatrix));
 
-  // Model uniforms
+  // Get light from scene (assuming first light is the sun)
+  const sun = scene.lights[0];
+
+  // Model uniforms for Phong shading
   let objectUniforms = {
-    u_transforms: wvpMat
+    // Scene uniforms
+    u_lightWorldPosition: sun.posArray,
+    u_viewWorldPosition: scene.camera.posArray,
+    u_ambientLight: sun.ambient,
+    u_diffuseLight: sun.diffuse,
+    u_specularLight: sun.specular,
+
+    // Model uniforms
+    u_world: worldMatrix,
+    u_worldInverseTransform: worldInverseTranspose,
+    u_worldViewProjection: worldViewProjectionMatrix,
+    u_ambientColor: object.color,
+    u_diffuseColor: object.color,
+    u_specularColor: [1.0, 1.0, 1.0, 1.0],
+    u_shininess: object.shininess
   }
   twgl.setUniforms(programInfo, objectUniforms);
 
@@ -239,18 +278,15 @@ function setupViewProjection(gl) {
 
 // Setup a ui.
 function setupUI() {
-  /*
   const gui = new GUI();
 
-  // Settings for the animation
-  const animFolder = gui.addFolder('Animation:');
-  animFolder.add( settings.rotationSpeed, 'x', 0, 360)
-      .decimals(2)
-  animFolder.add( settings.rotationSpeed, 'y', 0, 360)
-      .decimals(2)
-  animFolder.add( settings.rotationSpeed, 'z', 0, 360)
-      .decimals(2)
-  */
+  // Settings for the light (sun)
+  const sun = scene.lights[0];
+  const lightFolder = gui.addFolder('Sun Light:');
+  lightFolder.add(sun.position, 'x', -50, 50).name('Position X');
+  lightFolder.add(sun.position, 'y', 0, 50).name('Position Y');
+  lightFolder.add(sun.position, 'z', -50, 50).name('Position Z');
+  lightFolder.open();
 }
 
 main();
