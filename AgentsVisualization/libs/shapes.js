@@ -378,37 +378,37 @@ function cubeTextured(size) {
         a_texCoord: {
             numComponents: 2,
             data: [
-                // Front Face
-                0.0, 0.0,
-                1.0, 0.0,
-                1.0,  1.0,
-                0.0, 1.0,
-
-                // Back face
-                1.0, 0.0,
-                1.0, 1.0,
-                0.0, 1.0,
-                0.0, 0.0,
-
-                // Top face
-                0.0, 1.0,
-                0.0, 0.0,
-                1.0, 0.0,
-                1.0, 1.0,
-
-                // Bottom face
+                // Front Face (bien)
                 0.0, 0.0,
                 1.0, 0.0,
                 1.0, 1.0,
                 0.0, 1.0,
 
-                // Right face
+                // Back face (bien)
+                1.0, 0.0,
+                1.0, 1.0,
+                0.0, 1.0,
+                0.0, 0.0,
+
+                // Top face (rotado para estar vertical)
+                0.0, 0.0,
                 0.0, 1.0,
                 1.0, 1.0,
                 1.0, 0.0,
+
+                // Bottom face (rotado para estar vertical)
+                0.0, 1.0,
+                0.0, 0.0,
+                1.0, 0.0,
+                1.0, 1.0,
+
+                // Right face (vertical - mirando desde fuera)
+                1.0, 0.0,
+                1.0, 1.0,
+                0.0, 1.0,
                 0.0, 0.0,
 
-                // Left face
+                // Left face (vertical - mirando desde fuera)
                 0.0, 0.0,
                 1.0, 0.0,
                 1.0, 1.0,
@@ -473,6 +473,46 @@ function cubeSingleColor(size, color = [0.5, 0.5, 0.5, 1.0]) {
                 -1.0,  1.0,  1.0,
                 -1.0,  1.0, -1.0
             ].map(e => size * e)
+        },
+        a_normal: {
+            numComponents: 3,
+            data: [
+                // Front Face
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+
+                // Back face
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+
+                // Top face
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+
+                // Bottom face
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+
+                // Right face
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+
+                // Left face
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0,
+            ]
         },
         a_color: {
             numComponents: 4,

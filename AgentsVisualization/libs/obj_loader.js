@@ -40,7 +40,7 @@ function parseFace(parts, objData, arrays) {
                 arrays.a_normal.data.push(...objData.normals[vert[2]]);
             }
 
-            if (materialInUse) {
+            if (materialInUse && materialInUse['Kd']) {
                 arrays.a_color.data.push(...materialInUse['Kd'], 1);
             } else {
                 // Force a color for each vertex
@@ -159,4 +159,12 @@ function loadMtl(mtlString) {
     return materials;
 }
 
-export { loadObj, loadMtl };
+/*
+ * Clear all loaded materials
+ */
+function clearMaterials() {
+    materials = {};
+    materialInUse = undefined;
+}
+
+export { loadObj, loadMtl, clearMaterials };

@@ -51,6 +51,12 @@ class Camera3D {
 
         // Object to store pressed keys
         this.keysPressed = {};
+
+        // Mouse control variables
+        this.isDragging = false;
+        this.isPanning = false;
+        this.lastMouseX = 0;
+        this.lastMouseY = 0;
     }
 
     // Return the current position of the camera as an array of 3 floats
@@ -108,12 +114,65 @@ class Camera3D {
     }
 
     setupControls() {
+        // Keyboard controls
         window.addEventListener('keydown', (e) => {
             this.keysPressed[e.key] = true;
         });
 
         window.addEventListener('keyup', (e) => {
             this.keysPressed[e.key] = false;
+        });
+
+        // Mouse controls
+        const canvas = document.querySelector('canvas');
+
+        // Mouse down - start dragging
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Left click - rotate
+                this.isDragging = true;
+                this.isPanning = false;
+            } else if (e.button === 2) { // Right click - pan
+                this.isPanning = true;
+                this.isDragging = false;
+                e.preventDefault(); // Prevent context menu
+            }
+            this.lastMouseX = e.clientX;
+            this.lastMouseY = e.clientY;
+        });
+
+        // Mouse move - rotate or pan
+        canvas.addEventListener('mousemove', (e) => {
+            if (this.isDragging) {
+                const deltaX = e.clientX - this.lastMouseX;
+                const deltaY = e.clientY - this.lastMouseY;
+                this.rotate(-deltaX, deltaY);
+                this.lastMouseX = e.clientX;
+                this.lastMouseY = e.clientY;
+            } else if (this.isPanning) {
+                const deltaX = e.clientX - this.lastMouseX;
+                const deltaY = e.clientY - this.lastMouseY;
+                this.pan(-deltaX * 0.05, deltaY * 0.05);
+                this.lastMouseX = e.clientX;
+                this.lastMouseY = e.clientY;
+            }
+        });
+
+        // Mouse up - stop dragging
+        window.addEventListener('mouseup', () => {
+            this.isDragging = false;
+            this.isPanning = false;
+        });
+
+        // Prevent context menu on canvas
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        // Mouse wheel - zoom
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 1 : -1;
+            this.zoom(delta);
         });
     }
 
