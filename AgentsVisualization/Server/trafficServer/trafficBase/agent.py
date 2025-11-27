@@ -2,49 +2,240 @@ from mesa import Agent
 
 class Car(Agent):
     """
-    Agent that moves randomly.
+    Agent that moves using a subsumption architecture.
     Attributes:
         unique_id: Agent's ID 
-        direction: Randomly chosen direction chosen from one of eight directions
+        destination: Target destination position (if assigned)
     """
     def __init__(self, unique_id, model):
         """
-        Creates a new random agent.
+        Creates a new car agent.
         Args:
             unique_id: The agent's ID
             model: Model reference for the agent
         """
-        super().__init__(unique_id, model)
-
-    def move(self):
+        super().__init__(model)
+        self.unique_id = unique_id
+        self.destination = None  # Will be set if car has a destination
+    
+    def get_road_direction(self, position):
         """
-        Determines if the agent can move in the direction that was chosen
+        Gets the direction of the road at a given position.
+        Returns: "Up", "Down", "Left", "Right", or None
         """
-        # Get current position
+        cell_contents = self.model.grid.get_cell_list_contents([position])
+        for agent in cell_contents:
+            if isinstance(agent, Road):
+                return agent.direction
+        return None
+    
+    def get_traffic_light_state(self, position):
+        """
+        Gets the state of the traffic light at a given position.
+        Returns: True (green), False (red), or None (no traffic light)
+        """
+        cell_contents = self.model.grid.get_cell_list_contents([position])
+        for agent in cell_contents:
+            if isinstance(agent, Traffic_Light):
+                return agent.state
+        return None
+    
+    def get_direction_vector(self, direction):
+        """
+        Converts direction string to coordinate offset.
+        Returns: (dx, dy) tuple
+        """
+        direction_map = {
+            "Up": (0, 1),
+            "Down": (0, -1),
+            "Left": (-1, 0),
+            "Right": (1, 0)
+        }
+        return direction_map.get(direction, (0, 0))
+    
+    def get_position_in_direction(self, position, direction):
+        """
+        Gets the position in a given direction from a position.
+        """
+        dx, dy = self.get_direction_vector(direction)
+        return (position[0] + dx, position[1] + dy)
+    
+    # SUBSumption Architecture - Level 0: Avoid Collisions (Highest Priority)
+    def level_0_avoid_collisions(self):
+        """
+        Level 0: Avoid collisions with other cars and obstacles.
+        Returns: List of safe positions to move to, or empty list if should not move.
+        """
+        safe_positions = []
         x, y = self.pos
-
-        # Get neighbors
+        
+        # Get all neighbors
         neighbors = self.model.grid.get_neighborhood(self.pos, moore=True, include_center=False)
-
-        # Find empty cells (only road cells without cars)
-        possible_moves = []
+        
         for neighbor in neighbors:
             cell_contents = self.model.grid.get_cell_list_contents([neighbor])
-            # Check if cell has road and no other car
-            has_road = any(isinstance(agent, Road) for agent in cell_contents)
+            
+            # Check for obstacles - never move into obstacles
+            has_obstacle = any(isinstance(agent, Obstacle) for agent in cell_contents)
+            if has_obstacle:
+                continue
+            
+            # Check for other cars - never move into occupied cells
             has_car = any(isinstance(agent, Car) for agent in cell_contents)
-            if has_road and not has_car:
-                possible_moves.append(neighbor)
-
-        # Move to random empty road cell if available
-        if possible_moves:
-            import random
-            new_position = random.choice(possible_moves)
-            self.model.grid.move_agent(self, new_position)
-
+            if has_car:
+                continue
+            
+            # Check if there's a road - can only move on roads
+            has_road = any(isinstance(agent, Road) for agent in cell_contents)
+            if has_road:
+                safe_positions.append(neighbor)
+        
+        return safe_positions
+    
+    # SUBSumption Architecture - Level 1: Respect Traffic Lights
+    def level_1_respect_traffic_lights(self, safe_positions):
+        """
+        Level 1: Filter positions based on traffic light states.
+        Returns: List of positions where traffic lights are green or no traffic light exists.
+        """
+        valid_positions = []
+        
+        for position in safe_positions:
+            # Check traffic light at destination
+            traffic_light_state = self.get_traffic_light_state(position)
+            
+            # If no traffic light or green light, position is valid
+            if traffic_light_state is None or traffic_light_state:  # None or True (green)
+                valid_positions.append(position)
+            # If red light, check if we're already at the intersection
+            elif traffic_light_state is False:  # Red light
+                # Don't move into red light positions
+                continue
+        
+        return valid_positions if valid_positions else safe_positions  # If all blocked, return safe positions (will stop)
+    
+    # SUBSumption Architecture - Level 2: Follow Road Direction
+    def level_2_follow_road_direction(self, valid_positions):
+        """
+        Level 2: Prefer positions that follow the road direction.
+        Returns: List of positions following road direction, or all valid if no clear direction.
+        """
+        if not valid_positions:
+            return []
+        
+        # Get current road direction
+        current_road_dir = self.get_road_direction(self.pos)
+        
+        if current_road_dir is None:
+            return valid_positions  # No clear direction, return all valid
+        
+        # Calculate preferred next position based on road direction
+        preferred_pos = self.get_position_in_direction(self.pos, current_road_dir)
+        
+        # If preferred position is in valid positions, prioritize it
+        if preferred_pos in valid_positions:
+            return [preferred_pos]
+        
+        # Otherwise, check if we can continue in a similar direction
+        direction_offsets = {
+            "Up": [(0, 1), (-1, 1), (1, 1)],
+            "Down": [(0, -1), (-1, -1), (1, -1)],
+            "Left": [(-1, 0), (-1, 1), (-1, -1)],
+            "Right": [(1, 0), (1, 1), (1, -1)]
+        }
+        
+        preferred_offsets = direction_offsets.get(current_road_dir, [])
+        preferred_moves = []
+        
+        for dx, dy in preferred_offsets:
+            candidate = (self.pos[0] + dx, self.pos[1] + dy)
+            if candidate in valid_positions:
+                preferred_moves.append(candidate)
+        
+        return preferred_moves if preferred_moves else valid_positions
+    
+    # SUBSumption Architecture - Level 3: Move Toward Destination
+    def level_3_move_toward_destination(self, preferred_positions):
+        """
+        Level 3: If destination exists, prefer moves toward destination.
+        Returns: Best position to move toward destination, or preferred positions.
+        """
+        if not preferred_positions:
+            return None
+        
+        # If no destination assigned, return first preferred position
+        if self.destination is None:
+            # Try to find a destination if we don't have one
+            destinations = []
+            for agents, pos in self.model.grid.coord_iter():
+                for agent in agents:
+                    if isinstance(agent, Destination):
+                        destinations.append(pos)
+            
+            if destinations:
+                # Assign closest destination
+                import math
+                min_dist = float('inf')
+                closest_dest = None
+                for dest in destinations:
+                    dist = math.sqrt((dest[0] - self.pos[0])**2 + (dest[1] - self.pos[1])**2)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_dest = dest
+                self.destination = closest_dest
+        
+        if self.destination is None:
+            return preferred_positions[0] if preferred_positions else None
+        
+        # Find position that moves closest to destination
+        import math
+        best_pos = preferred_positions[0]
+        min_dist = float('inf')
+        
+        for pos in preferred_positions:
+            dist_to_dest = math.sqrt((self.destination[0] - pos[0])**2 + 
+                                    (self.destination[1] - pos[1])**2)
+            if dist_to_dest < min_dist:
+                min_dist = dist_to_dest
+                best_pos = pos
+        
+        return best_pos
+    
+    def move(self):
+        """
+        Moves the car using subsumption architecture.
+        Each level can inhibit higher levels.
+        """
+        # Level 0: Avoid collisions (highest priority)
+        safe_positions = self.level_0_avoid_collisions()
+        
+        if not safe_positions:
+            return  # Cannot move safely, stay in place
+        
+        # Level 1: Respect traffic lights
+        valid_positions = self.level_1_respect_traffic_lights(safe_positions)
+        
+        if not valid_positions:
+            return  # Blocked by traffic lights, stay in place
+        
+        # Level 2: Follow road direction
+        preferred_positions = self.level_2_follow_road_direction(valid_positions)
+        
+        if not preferred_positions:
+            return  # No preferred moves, stay in place
+        
+        # Level 3: Move toward destination
+        target_position = self.level_3_move_toward_destination(preferred_positions)
+        
+        if target_position:
+            self.model.grid.move_agent(self, target_position)
+            # Check if we reached destination
+            if self.destination and self.pos == self.destination:
+                self.destination = None  # Clear destination, will find new one
+    
     def step(self):
         """ 
-        Determines the new direction it will take, and then moves
+        Executes one step of the car's behavior using subsumption architecture.
         """
         self.move()
 
@@ -53,7 +244,6 @@ class Traffic_Light(Agent):
     Traffic light. Where the traffic lights are in the grid.
     """
     def __init__(self, unique_id, model, state = False, timeToChange = 10):
-        super().__init__(unique_id, model)
         """
         Creates a new Traffic light.
         Args:
@@ -62,6 +252,8 @@ class Traffic_Light(Agent):
             state: Whether the traffic light is green or red
             timeToChange: After how many step should the traffic light change color 
         """
+        super().__init__(model)
+        self.unique_id = unique_id
         self.state = state
         self.timeToChange = timeToChange
 
@@ -69,7 +261,7 @@ class Traffic_Light(Agent):
         """ 
         To change the state (green or red) of the traffic light in case you consider the time to change of each traffic light.
         """
-        if self.model.schedule.steps % self.timeToChange == 0:
+        if self.model.steps % self.timeToChange == 0:
             self.state = not self.state
 
 class Destination(Agent):
@@ -77,7 +269,8 @@ class Destination(Agent):
     Destination agent. Where each car should go.
     """
     def __init__(self, unique_id, model):
-        super().__init__(unique_id, model)
+        super().__init__(model)
+        self.unique_id = unique_id
 
     def step(self):
         pass
@@ -87,7 +280,8 @@ class Obstacle(Agent):
     Obstacle agent. Just to add obstacles to the grid.
     """
     def __init__(self, unique_id, model):
-        super().__init__(unique_id, model)
+        super().__init__(model)
+        self.unique_id = unique_id
 
     def step(self):
         pass
@@ -104,7 +298,8 @@ class Road(Agent):
             model: Model reference for the agent
             direction: Direction where the cars can move
         """
-        super().__init__(unique_id, model)
+        super().__init__(model)
+        self.unique_id = unique_id
         self.direction = direction
 
     def step(self):

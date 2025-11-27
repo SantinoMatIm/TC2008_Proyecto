@@ -1,5 +1,4 @@
 from mesa import Model
-from mesa.time import RandomActivation
 from mesa.space import MultiGrid
 from trafficBase.agent import *
 import json
@@ -11,8 +10,9 @@ class CityModel(Model):
         Args:
             N: Number of agents in the simulation
     """
-    def __init__(self, N):
-
+    def __init__(self, N, seed=42):
+        super().__init__(seed=seed)
+        
         # Load the map dictionary. The dictionary maps the characters in the map file to the corresponding agent.
         dataDictionary = json.load(open("city_files/mapDictionary.json"))
 
@@ -25,7 +25,6 @@ class CityModel(Model):
             self.height = len(lines)
 
             self.grid = MultiGrid(self.width, self.height, torus = False) 
-            self.schedule = RandomActivation(self)
 
             # Goes through each character in the map file and creates the corresponding agent.
             for r, row in enumerate(lines):
@@ -37,7 +36,6 @@ class CityModel(Model):
                     elif col in ["S", "s"]:
                         agent = Traffic_Light(f"tl_{r*self.width+c}", self, False if col == "S" else True, int(dataDictionary[col]))
                         self.grid.place_agent(agent, (c, self.height - r - 1))
-                        self.schedule.add(agent)
                         self.traffic_lights.append(agent)
 
                     elif col == "#":
@@ -63,10 +61,9 @@ class CityModel(Model):
         for i in range(min(N, len(road_positions))):
             car = Car(f"car_{i}", self)
             self.grid.place_agent(car, road_positions[i])
-            self.schedule.add(car)
 
         self.running = True
 
     def step(self):
         '''Advance the model by one step.'''
-        self.schedule.step()
+        self.agents.shuffle_do("step")
