@@ -35,6 +35,9 @@ import fsTextureGLSL from '../assets/shaders/fs_texture.glsl?raw';
 
 const scene = new Scene3D();
 
+// Mapa rápido para saber la dirección de la calle en cada celda (x, z)
+const roadDirectionMap = new Map();
+
 // Variables globales que usamos en todo el código
 let colorProgramInfo = undefined;
 let textureProgramInfo = undefined;
@@ -385,7 +388,12 @@ illum 2
     road.bufferInfo = roadCube.bufferInfo;
     road.vao = roadCube.vao;
     road.scale = { x: 1, y: 0.05, z: 1 };
-    road.shininess = 100.0; // Superficie reflectante para que refleje las luces
+    road.color = [0.3, 0.3, 0.3, 1];
+
+    // Guardar la dirección de la calle en el mapa (clave: "x,z")
+    const key = `${Math.round(road.position.x)},${Math.round(road.position.z)}`;
+    roadDirectionMap.set(key, road.direction);
+
     scene.addObject(road);
   }
 
@@ -649,8 +657,9 @@ illum 2
       car.yOffset = -1.0;
     }
 
-    // Rotar el coche para que apunte en la dirección de la calle
-    car.rotRad.y = -Math.PI / 2;
+    // La rotación inicial se ajustará dinámicamente en drawObject según la calle
+    car.rotRad.y = 0;
+    car.color = [1.0, 0.8, 0.0, 1.0];
     scene.addObject(car);
   }
 
@@ -718,9 +727,35 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
   let v3_tra = object.posArray;
   let v3_sca = object.scaArray;
 
-  // Aplicar offset en Y para los coches (para que no floten)
-  if (cars.includes(object) && object.yOffset !== undefined) {
-    v3_tra = [v3_tra[0], v3_tra[1] + object.yOffset, v3_tra[2]];
+  // Si es un coche, alinéalo con la dirección de la calle bajo él
+  if (cars.includes(object)) {
+    const key = `${Math.round(object.position.x)},${Math.round(object.position.z)}`;
+    const dir = roadDirectionMap.get(key);
+
+    if (dir) {
+      // Mapear la dirección lógica a un ángulo de rotación en Y
+      // Asumimos que el modelo del coche apunta inicialmente en dirección +Z
+      // Ajusta estos valores si ves que apuntan al revés
+      switch (dir) {
+        case 'Up':
+          object.rotRad.y = 0;
+          break;
+        case 'Down':
+          object.rotRad.y = Math.PI;
+          break;
+        case 'Left':
+          object.rotRad.y = -Math.PI / 2;
+          break;
+        case 'Right':
+          object.rotRad.y = Math.PI / 2;
+          break;
+      }
+    }
+
+    // Aplicar offset en Y para los coches (para que no floten)
+    if (object.yOffset !== undefined) {
+      v3_tra = [v3_tra[0], v3_tra[1] + object.yOffset, v3_tra[2]];
+    }
   }
 
   // Crear las matrices de transformación individuales

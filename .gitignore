@@ -43,7 +43,8 @@ yarn-debug.log*
 yarn-error.log*
 .npm
 .yarn
-
+package-lock.json
+AgentsVisualization/package-lock.json
 # Vite build output
 AgentsVisualization/dist/
 

@@ -60,7 +60,14 @@ class CityModel(Model):
         random.shuffle(road_positions)
         for i in range(min(N, len(road_positions))):
             car = Car(f"car_{i}", self)
-            self.grid.place_agent(car, road_positions[i])
+            pos = road_positions[i]
+            self.grid.place_agent(car, pos)
+            # Initialize car's facing direction based on road direction
+            cell_contents = self.grid.get_cell_list_contents([pos])
+            for agent in cell_contents:
+                if isinstance(agent, Road):
+                    car.facing_direction = agent.direction
+                    break
 
         self.running = True
 
