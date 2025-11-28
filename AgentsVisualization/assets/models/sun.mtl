@@ -1,0 +1,12 @@
+# MTL File for Sun
+# Bright emissive sun material
+
+newmtl SunMat
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Kd 1.000000 0.800000 0.200000
+Ks 1.000000 1.000000 0.800000
+Ke 5.000000 4.000000 1.000000
+Ni 1.000000
+d 1.000000
+illum 2

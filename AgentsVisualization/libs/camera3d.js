@@ -192,16 +192,16 @@ class Camera3D {
         }
 
         // Panning
-        if (this.keysPressed['d'] || this.keysPressed['Q']) {
+        if (this.keysPressed['d'] || this.keysPressed['D'] || this.keysPressed['Q']) {
             this.pan(-1, 0);
         }
-        if (this.keysPressed['a'] || this.keysPressed['E']) {
+        if (this.keysPressed['a'] || this.keysPressed['A'] || this.keysPressed['E']) {
             this.pan(1, 0);
         }
-        if (this.keysPressed['w'] || this.keysPressed['Z']) {
+        if (this.keysPressed['w'] || this.keysPressed['W'] || this.keysPressed['Z']) {
             this.pan(0, 1);
         }
-        if (this.keysPressed['s'] || this.keysPressed['C']) {
+        if (this.keysPressed['s'] || this.keysPressed['S'] || this.keysPressed['C']) {
             this.pan(0, -1);
         }
 

@@ -52,6 +52,17 @@ let streetLightIntensity = 0.5;
 // Array para guardar posiciones de postes de luz
 let streetLightPositions = [];
 
+// Sistema de lluvia
+let isRaining = true;
+let rainDrops = [];
+
+// Sistema de rayos
+let lightning = null;
+let lightningTimer = 0; // Timer que se incrementa continuamente
+let lightningDuration = 0;
+let nextLightningTime = 5000; // Primer rayo a los 5 segundos
+let lightningInterval = 15000; // 15 segundos entre rayos
+
 
 // Función principal, es async para poder hacer peticiones al servidor
 async function main() {
@@ -217,6 +228,24 @@ async function setupObjects(scene, gl, programInfo) {
   sidewalkCube.arrays = cubeSingleColor(1, [0.6, 0.6, 0.65, 1.0]); // Gris claro
   sidewalkCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, sidewalkCube.arrays);
   sidewalkCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, sidewalkCube.bufferInfo);
+
+  // Césped húmedo - verde oscuro
+  const grassCube = new Object3D(-104);
+  grassCube.arrays = cubeSingleColor(1, [0.2, 0.5, 0.2, 1.0]); // Verde oscuro húmedo
+  grassCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, grassCube.arrays);
+  grassCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, grassCube.bufferInfo);
+
+  // Gotas de lluvia - azul transparente
+  const rainDropCube = new Object3D(-105);
+  rainDropCube.arrays = cubeSingleColor(1, [0.7, 0.8, 0.9, 0.6]); // Azul claro semi-transparente
+  rainDropCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, rainDropCube.arrays);
+  rainDropCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, rainDropCube.bufferInfo);
+
+  // Rayo - blanco brillante
+  const lightningCube = new Object3D(-106);
+  lightningCube.arrays = cubeSingleColor(1, [1.0, 1.0, 0.9, 1.0]); // Blanco amarillento brillante
+  lightningCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightningCube.arrays);
+  lightningCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightningCube.bufferInfo);
 
   // Cargar semáforo con luz verde
   clearMaterials();
@@ -459,12 +488,14 @@ illum 2
             obj.bufferInfo = treeObj.bufferInfo;
             obj.vao = treeObj.vao;
             obj.scale = { x: 0.8, y: 0.8, z: 0.8 };
+            obj.shininess = 250.0;
           } else {
             // Poste de luz
             obj.arrays = streetlightObj.arrays;
             obj.bufferInfo = streetlightObj.bufferInfo;
             obj.vao = streetlightObj.vao;
             obj.scale = { x: 1.0, y: 1.0, z: 1.0 };
+            obj.shininess = 250.0;
 
             // Agregar posiciones de luces según orientación
             if (sizeX === 1) {
@@ -663,10 +694,274 @@ illum 2
   sunObj.position = sun.position;
   sunObj.scale = { x: 7, y: 7, z: 7 };
   scene.addObject(sunObj);
+
+  const grassGround = new Object3D('grass-ground', [0, -0.15, 0]);
+  grassGround.arrays = grassCube.arrays;
+  grassGround.bufferInfo = grassCube.bufferInfo;
+  grassGround.vao = grassCube.vao;
+  grassGround.scale = { x: 165, y: 0.1, z: 165 };
+  scene.addObject(grassGround);
+
+  const highway = new Object3D('highway', [94.5, -0.08, 12]);
+  highway.arrays = roadCube.arrays;
+  highway.bufferInfo = roadCube.bufferInfo;
+  highway.vao = roadCube.vao;
+  highway.scale = { x: 70.5, y: 0.05, z: 2 };
+  highway.shininess = 100.0;
+  scene.addObject(highway);
+
+  const yellowLineCube = new Object3D(-114);
+  yellowLineCube.arrays = cubeSingleColor(1, [0.9, 0.8, 0.2, 1.0]);
+  yellowLineCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, yellowLineCube.arrays);
+  yellowLineCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, yellowLineCube.bufferInfo);
+
+  for (let i = 0; i < 56; i++) {
+    const line = new Object3D(`highway-line-${i}`, [26 + (i * 2.5), -0.04, 12]);
+    line.arrays = yellowLineCube.arrays;
+    line.bufferInfo = yellowLineCube.bufferInfo;
+    line.vao = yellowLineCube.vao;
+    line.scale = { x: 1.2, y: 0.05, z: 0.15 };
+    line.shininess = 80.0;
+    scene.addObject(line);
+  }
+
+  function createSemicircle(radius, segments, color) {
+    const positions = [0, 0, 0];
+    const normals = [];
+    const colors = [];
+    const indices = [];
+
+    for (let i = 0; i <= segments; i++) {
+      const angle = Math.PI * i / segments;
+      const x = 0;
+      const y = radius * Math.sin(angle);
+      const z = radius * Math.cos(angle) - radius;
+      positions.push(x, y, z);
+    }
+
+    for (let i = 0; i <= segments + 1; i++) {
+      normals.push(-1, 0, 0);
+    }
+
+    for (let i = 0; i <= segments + 1; i++) {
+      colors.push(...color);
+    }
+
+    for (let i = 0; i < segments; i++) {
+      indices.push(0, i + 1, i + 2);
+    }
+
+    return {
+      a_position: { numComponents: 3, data: positions },
+      a_normal: { numComponents: 3, data: normals },
+      a_color: { numComponents: 4, data: colors },
+      indices: { numComponents: 3, data: indices }
+    };
+  }
+
+  const lightTunnel = new Object3D('light-tunnel', [165, 0, 22]);
+  lightTunnel.arrays = createSemicircle(4, 32, [1.0, 1.0, 1.0, 1.0]);
+  lightTunnel.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnel.arrays);
+  lightTunnel.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnel.bufferInfo);
+  lightTunnel.shininess = 1000.0;
+  scene.addObject(lightTunnel);
+
+  const lightTunnel2 = new Object3D('light-tunnel-2', [165, 0, 22]);
+  lightTunnel2.arrays = createSemicircle(6, 32, [1.0, 0.98, 0.9, 1.0]);
+  lightTunnel2.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnel2.arrays);
+  lightTunnel2.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnel2.bufferInfo);
+  lightTunnel2.shininess = 1000.0;
+  scene.addObject(lightTunnel2);
+
+  const lightTunnel3 = new Object3D('light-tunnel-3', [165, 0, 22]);
+  lightTunnel3.arrays = createSemicircle(8, 32, [1.0, 0.95, 0.8, 0.9]);
+  lightTunnel3.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnel3.arrays);
+  lightTunnel3.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnel3.bufferInfo);
+  lightTunnel3.shininess = 1000.0;
+  scene.addObject(lightTunnel3);
+
+  const lightTunnelOuter = new Object3D('light-tunnel-outer', [165, 0, 22]);
+  lightTunnelOuter.arrays = createSemicircle(10, 32, [1.0, 0.9, 0.7, 0.6]);
+  lightTunnelOuter.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnelOuter.arrays);
+  lightTunnelOuter.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnelOuter.bufferInfo);
+  lightTunnelOuter.shininess = 1000.0;
+  scene.addObject(lightTunnelOuter);
+  for (let i = 0; i < 800; i++) {
+    const drop = new Object3D(`rain-${i}`, [
+      Math.random() * 330 - 165,
+      Math.random() * 60 + 10,
+      Math.random() * 330 - 165
+    ]);
+    drop.arrays = rainDropCube.arrays;
+    drop.bufferInfo = rainDropCube.bufferInfo;
+    drop.vao = rainDropCube.vao;
+    drop.scale = { x: 0.02, y: 0.5, z: 0.02 };
+    drop.velocity = Math.random() * 0.3 + 0.5;
+    drop.visible = false;
+    rainDrops.push(drop);
+    scene.addObject(drop);
+  }
+
+  lightning = new Object3D('lightning', [
+    Math.random() * 30,
+    30,
+    Math.random() * 30
+  ]);
+  lightning.arrays = lightningCube.arrays;
+  lightning.bufferInfo = lightningCube.bufferInfo;
+  lightning.vao = lightningCube.vao;
+  lightning.scale = { x: 0.3, y: 60, z: 0.3 };
+  lightning.visible = false;
+  scene.addObject(lightning);
+
+  const bushCube = new Object3D(-107);
+  bushCube.arrays = cubeSingleColor(1, [0.15, 0.45, 0.15, 1.0]);
+  bushCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, bushCube.arrays);
+  bushCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, bushCube.bufferInfo);
+
+  const darkBushCube = new Object3D(-108);
+  darkBushCube.arrays = cubeSingleColor(1, [0.1, 0.3, 0.1, 1.0]);
+  darkBushCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, darkBushCube.arrays);
+  darkBushCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, darkBushCube.bufferInfo);
+
+  const yellowBushCube = new Object3D(-109);
+  yellowBushCube.arrays = cubeSingleColor(1, [0.4, 0.45, 0.2, 1.0]);
+  yellowBushCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, yellowBushCube.arrays);
+  yellowBushCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, yellowBushCube.bufferInfo);
+
+  const rockCube = new Object3D(-110);
+  rockCube.arrays = cubeSingleColor(1, [0.4, 0.4, 0.45, 1.0]);
+  rockCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, rockCube.arrays);
+  rockCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, rockCube.bufferInfo);
+
+  const deadBushCube = new Object3D(-111);
+  deadBushCube.arrays = cubeSingleColor(1, [0.35, 0.25, 0.15, 1.0]);
+  deadBushCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, deadBushCube.arrays);
+  deadBushCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, deadBushCube.bufferInfo);
+
+  const smallPlantCube = new Object3D(-112);
+  smallPlantCube.arrays = cubeSingleColor(1, [0.2, 0.5, 0.25, 1.0]);
+  smallPlantCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, smallPlantCube.arrays);
+  smallPlantCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, smallPlantCube.bufferInfo);
+
+  const grassClumpCube = new Object3D(-113);
+  grassClumpCube.arrays = cubeSingleColor(1, [0.25, 0.55, 0.2, 1.0]);
+  grassClumpCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, grassClumpCube.arrays);
+  grassClumpCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, grassClumpCube.bufferInfo);
+  const cityMinX = -1;
+  const cityMaxX = 25;
+  const cityMinZ = -1;
+  const cityMaxZ = 25;
+  const minSeparation = 4;
+  const worldLimit = 165;
+
+  for (let i = 0; i < 1800; i++) {
+    let x, z;
+    const zone = i % 4;
+
+    if (zone === 0) {
+      x = Math.random() * (worldLimit * 2) - worldLimit;
+      z = Math.random() * (worldLimit - cityMaxZ - minSeparation) + (cityMaxZ + minSeparation);
+    } else if (zone === 1) {
+      x = Math.random() * (worldLimit * 2) - worldLimit;
+      z = Math.random() * (worldLimit - minSeparation) - worldLimit;
+    } else if (zone === 2) {
+      x = Math.random() * (worldLimit - cityMaxX - minSeparation) + (cityMaxX + minSeparation);
+      z = Math.random() * (worldLimit * 2) - worldLimit;
+    } else {
+      x = Math.random() * (worldLimit - minSeparation) - worldLimit;
+      z = Math.random() * (worldLimit * 2) - worldLimit;
+    }
+
+    if (x >= 24 && x <= 165 && z >= 10 && z <= 14) {
+      continue;
+    }
+
+    const type = Math.random();
+
+    if (type < 0.20) {
+      const bush = new Object3D(`bush-${i}`, [x, 0, z]);
+      bush.arrays = bushCube.arrays;
+      bush.bufferInfo = bushCube.bufferInfo;
+      bush.vao = bushCube.vao;
+      const scale = 0.3 + Math.random() * 0.5;
+      bush.scale = { x: scale, y: scale * 0.6, z: scale };
+      bush.shininess = 150.0;
+      scene.addObject(bush);
+    } else if (type < 0.35) {
+      const darkBush = new Object3D(`darkbush-${i}`, [x, 0, z]);
+      darkBush.arrays = darkBushCube.arrays;
+      darkBush.bufferInfo = darkBushCube.bufferInfo;
+      darkBush.vao = darkBushCube.vao;
+      const scale = 0.25 + Math.random() * 0.45;
+      darkBush.scale = { x: scale, y: scale * 0.7, z: scale };
+      darkBush.shininess = 120.0;
+      scene.addObject(darkBush);
+    } else if (type < 0.45) {
+      const yellowBush = new Object3D(`yellowbush-${i}`, [x, 0, z]);
+      yellowBush.arrays = yellowBushCube.arrays;
+      yellowBush.bufferInfo = yellowBushCube.bufferInfo;
+      yellowBush.vao = yellowBushCube.vao;
+      const scale = 0.2 + Math.random() * 0.4;
+      yellowBush.scale = { x: scale, y: scale * 0.5, z: scale };
+      yellowBush.shininess = 100.0;
+      scene.addObject(yellowBush);
+    } else if (type < 0.60) {
+      const rock = new Object3D(`rock-${i}`, [x, 0, z]);
+      rock.arrays = rockCube.arrays;
+      rock.bufferInfo = rockCube.bufferInfo;
+      rock.vao = rockCube.vao;
+      const scale = 0.15 + Math.random() * 0.5;
+      rock.scale = { x: scale, y: scale * 0.8, z: scale * 1.2 };
+      rock.shininess = 80.0;
+      rock.rotRad.y = Math.random() * Math.PI * 2;
+      scene.addObject(rock);
+    } else if (type < 0.85) {
+      const tree = new Object3D(`tree-wild-${i}`, [x, 0, z]);
+      tree.arrays = treeObj.arrays;
+      tree.bufferInfo = treeObj.bufferInfo;
+      tree.vao = treeObj.vao;
+      const scale = 0.4 + Math.random() * 1.1;
+      tree.scale = { x: scale, y: scale, z: scale };
+      tree.shininess = 250.0;
+      tree.rotRad.y = Math.random() * Math.PI * 2;
+      scene.addObject(tree);
+    } else if (type < 0.90) {
+      const deadBush = new Object3D(`deadbush-${i}`, [x, 0, z]);
+      deadBush.arrays = deadBushCube.arrays;
+      deadBush.bufferInfo = deadBushCube.bufferInfo;
+      deadBush.vao = deadBushCube.vao;
+      const scale = 0.2 + Math.random() * 0.3;
+      deadBush.scale = { x: scale, y: scale * 0.4, z: scale };
+      deadBush.shininess = 90.0;
+      scene.addObject(deadBush);
+    } else if (type < 0.95) {
+      const smallPlant = new Object3D(`plant-${i}`, [x, 0, z]);
+      smallPlant.arrays = smallPlantCube.arrays;
+      smallPlant.bufferInfo = smallPlantCube.bufferInfo;
+      smallPlant.vao = smallPlantCube.vao;
+      const scale = 0.1 + Math.random() * 0.15;
+      smallPlant.scale = { x: scale, y: scale * 1.5, z: scale };
+      smallPlant.shininess = 130.0;
+      scene.addObject(smallPlant);
+    } else {
+      const grassClump = new Object3D(`grass-${i}`, [x, 0, z]);
+      grassClump.arrays = grassClumpCube.arrays;
+      grassClump.bufferInfo = grassClumpCube.bufferInfo;
+      grassClump.vao = grassClumpCube.vao;
+      const scale = 0.08 + Math.random() * 0.12;
+      grassClump.scale = { x: scale * 1.3, y: scale * 0.8, z: scale * 1.3 };
+      grassClump.shininess = 140.0;
+      scene.addObject(grassClump);
+    }
+  }
 }
 
 // Función para dibujar un objeto con todas sus transformaciones
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
+  // No dibujar gotas de lluvia si no están visibles
+  if (object.visible === false) return;
+
   // Actualizar modelo del semáforo según su estado
   if (trafficLights.includes(object)) {
     if (object.state) {
@@ -680,8 +975,10 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     }
   }
 
-  // Marcar si es el sol para aplicar iluminación especial
+  // Marcar si es el sol, el rayo o el túnel de luz para aplicar iluminación especial
   const isSun = object.id === -999;
+  const isLightning = object.id === 'lightning';
+  const isLightTunnel = object.id === 'light-tunnel' || object.id === 'light-tunnel-outer' || object.id === 'light-tunnel-2' || object.id === 'light-tunnel-3';
 
   // Si el objeto usa texturas, usar el shader de texturas
   if (object.isTextured) {
@@ -748,10 +1045,10 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
   // Obtener el sol
   const sun = scene.lights[0];
 
-  // Si es el sol, usar iluminación completa para que brille por sí mismo
-  const ambientLight = isSun ? [1.0, 1.0, 1.0, 1.0] : sun.ambient;
-  const diffuseLight = isSun ? [0.0, 0.0, 0.0, 1.0] : sun.diffuse;
-  const specularLight = isSun ? [0.0, 0.0, 0.0, 1.0] : sun.specular;
+  // Si es el sol, el rayo o el túnel de luz, usar iluminación completa para que brille por sí mismo
+  const ambientLight = (isSun || isLightning || isLightTunnel) ? [1.0, 1.0, 1.0, 1.0] : sun.ambient;
+  const diffuseLight = (isSun || isLightning || isLightTunnel) ? [0.0, 0.0, 0.0, 1.0] : sun.diffuse;
+  const specularLight = (isSun || isLightning || isLightTunnel) ? [0.0, 0.0, 0.0, 1.0] : sun.specular;
 
   // Preparar arrays de posiciones y colores de semáforos Y postes de luz
   const allLightPositions = [];
@@ -810,6 +1107,12 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 async function drawScene() {
   // Calcular tiempo transcurrido
   let now = Date.now();
+
+  // Inicializar 'then' en el primer frame
+  if (then === 0) {
+    then = now;
+  }
+
   let deltaTime = now - then;
   elapsed += deltaTime;
   let fract = Math.min(1.0, elapsed / duration);
@@ -823,13 +1126,73 @@ async function drawScene() {
   gl.enable(gl.CULL_FACE);
   gl.enable(gl.DEPTH_TEST);
 
+  // Actualizar lluvia
+  if (isRaining) {
+    for (let drop of rainDrops) {
+      drop.visible = true;
+      // Mover gota hacia abajo
+      drop.position.y -= drop.velocity;
+
+      // Si llega al suelo, reiniciar arriba (dentro del mundo)
+      if (drop.position.y < 0) {
+        drop.position.y = Math.random() * 20 + 50; // Entre 50 y 70
+        drop.position.x = Math.random() * 330 - 165; // -165 a 165
+        drop.position.z = Math.random() * 330 - 165; // -165 a 165
+      }
+    }
+  } else {
+    // Ocultar todas las gotas cuando no llueve
+    for (let drop of rainDrops) {
+      drop.visible = false;
+    }
+  }
+
+  // Actualizar rayo
+  lightningTimer += deltaTime;
+
+  // Disparar rayo cuando se alcanza el tiempo programado
+  if (lightningTimer >= nextLightningTime && lightningDuration <= 0) {
+    // Posicionar rayo en la ciudad
+    lightning.position.x = Math.random() * 30;
+    lightning.position.z = Math.random() * 30;
+    lightning.visible = true;
+    lightningDuration = 200; // 200ms de duración
+    nextLightningTime = lightningTimer + lightningInterval; // Siguiente rayo en 15 segundos
+  }
+
+  // Desactivar rayo después de la duración
+  if (lightningDuration > 0) {
+    lightningDuration -= deltaTime;
+    if (lightningDuration <= 0) {
+      lightning.visible = false;
+    }
+  }
+
   scene.camera.checkKeys();
   const viewProjectionMatrix = setupViewProjection(gl);
 
-  // Dibujar todos los objetos
+  // Dibujar primero todos los objetos opacos (sin blending)
+  gl.disable(gl.BLEND);
   gl.useProgram(colorProgramInfo.program);
   for (let object of scene.objects) {
-    drawObject(gl, colorProgramInfo, object, viewProjectionMatrix, fract);
+    // Dibujar solo objetos que NO son gotas de lluvia
+    const isRainDrop = object.id && object.id.toString().startsWith('rain-');
+    if (!isRainDrop) {
+      drawObject(gl, colorProgramInfo, object, viewProjectionMatrix, fract);
+    }
+  }
+
+  // Luego dibujar las gotas de lluvia con blending
+  if (isRaining) {
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    for (let object of scene.objects) {
+      const isRainDrop = object.id && object.id.toString().startsWith('rain-');
+      if (isRainDrop) {
+        drawObject(gl, colorProgramInfo, object, viewProjectionMatrix, fract);
+      }
+    }
+    gl.disable(gl.BLEND);
   }
 
   // Actualizar la simulación cada cierto tiempo
@@ -883,6 +1246,26 @@ function setupUI() {
     streetLightIntensity = value;
   });
   intensityFolder.open();
+
+  // Control de clima
+  const weatherFolder = gui.addFolder('Weather');
+  weatherFolder.add({ rain: isRaining }, 'rain').name('Rain').onChange((value) => {
+    isRaining = value;
+  });
+
+  // Botón para activar rayo manualmente
+  const lightningControls = {
+    triggerLightning: () => {
+      // Posicionar rayo en la ciudad
+      lightning.position.x = Math.random() * 30;
+      lightning.position.z = Math.random() * 30;
+      lightning.visible = true;
+      lightningDuration = 200; // 200ms de duración
+      // NO resetear el timer para no romper el ciclo automático
+    }
+  };
+  weatherFolder.add(lightningControls, 'triggerLightning').name('Lightning Strike');
+  weatherFolder.open();
 
   // Controles de cámara
   const cameraFolder = gui.addFolder('Camera');
