@@ -4,14 +4,14 @@ from trafficBase.agent import *
 import json
 
 class CityModel(Model):
-    """ 
+    """
         Creates a model based on a city map.
 
         Args:
             N: Number of agents in the simulation
     """
-    def __init__(self, N, seed=42):
-        super().__init__(seed=seed)
+    def __init__(self, N):
+        super().__init__()
         
         # Load the map dictionary. The dictionary maps the characters in the map file to the corresponding agent.
         dataDictionary = json.load(open("city_files/mapDictionary.json"))
@@ -66,4 +66,5 @@ class CityModel(Model):
 
     def step(self):
         '''Advance the model by one step.'''
-        self.agents.shuffle_do("step")
+        for agent in self.agents:
+            agent.step()
