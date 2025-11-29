@@ -640,6 +640,7 @@ illum 2
       car.prepareVAO(gl, programInfo, car2023Data);
       car.scale = { x: 0.5, y: 0.5, z: 0.5 };
       car.yOffset = -1.08;
+      car.isCar2024 = false;
     } else {
       // Car 2024 tiene materiales separados: cuerpo random, ventanas azul claro
       const car2024Mtl = `newmtl CarBodyMat
@@ -686,6 +687,7 @@ illum 2
       car.prepareVAO(gl, programInfo, car2024Data);
       car.scale = { x: 0.16, y: 0.16, z: 0.16 };
       car.yOffset = -1.0;
+      car.isCar2024 = true;
     }
 
     // La rotación inicial se ajustará dinámicamente en drawObject según la calle
@@ -1030,21 +1032,23 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     const dir = roadDirectionMap.get(key);
 
     if (dir) {
+      // El car-2024 tiene una orientación diferente en su modelo 3D
+      // Necesita una rotación base de -90 grados para alinearse correctamente
+      const baseRotation = object.isCar2024 ? -Math.PI / 2 : 0;
+
       // Mapear la dirección lógica a un ángulo de rotación en Y
-      // Asumimos que el modelo del coche apunta inicialmente en dirección +Z
-      // Ajusta estos valores si ves que apuntan al revés
       switch (dir) {
         case 'Up':
-          object.rotRad.y = 0;
+          object.rotRad.y = 0 + baseRotation;
           break;
         case 'Down':
-          object.rotRad.y = Math.PI;
+          object.rotRad.y = Math.PI + baseRotation;
           break;
         case 'Left':
-          object.rotRad.y = -Math.PI / 2;
+          object.rotRad.y = -Math.PI / 2 + baseRotation;
           break;
         case 'Right':
-          object.rotRad.y = Math.PI / 2;
+          object.rotRad.y = Math.PI / 2 + baseRotation;
           break;
       }
     }
