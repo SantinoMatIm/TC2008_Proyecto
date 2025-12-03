@@ -106,15 +106,47 @@ class Car(Agent):
         """
         Gets all valid neighboring positions from current position.
         Returns list of (next_pos, road_direction) tuples.
+        Includes diagonal movements for realistic lane changes (only forward diagonals).
         """
         neighbors = []
-        directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]  # Up, Down, Right, Left
 
-        for dx, dy in directions:
+        # Get current road direction to determine forward direction
+        current_road_dir = self.get_road_direction(position)
+
+        # Straight movements (priority)
+        straight_directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]  # Up, Down, Right, Left
+        for dx, dy in straight_directions:
             next_pos = (position[0] + dx, position[1] + dy)
             if self.is_valid_move(position, next_pos, avoid_cars=avoid_cars):
                 road_dir = self.get_road_direction(next_pos)
                 neighbors.append((next_pos, road_dir))
+
+        # Diagonal movements (for lane changes while advancing forward only)
+        if current_road_dir:
+            # Map road direction to allowed diagonal movements (forward + lateral)
+            forward_diagonals = {
+                "Right": [(1, 1), (1, -1)],   # Right+Up, Right+Down
+                "Left": [(-1, 1), (-1, -1)],  # Left+Up, Left+Down
+                "Up": [(1, 1), (-1, 1)],      # Up+Right, Up+Left
+                "Down": [(1, -1), (-1, -1)]   # Down+Right, Down+Left
+            }
+
+            diagonal_directions = forward_diagonals.get(current_road_dir, [])
+            for dx, dy in diagonal_directions:
+                next_pos = (position[0] + dx, position[1] + dy)
+                # Diagonal move is valid if:
+                # 1. The diagonal position itself is valid
+                # 2. At least one of the intermediate positions is valid (to ensure continuity)
+                if self.is_valid_move(position, next_pos, avoid_cars=avoid_cars):
+                    # Check if we can reach diagonal through intermediate steps
+                    intermediate1 = (position[0] + dx, position[1])
+                    intermediate2 = (position[0], position[1] + dy)
+
+                    # At least one intermediate path should be valid
+                    if (self.is_valid_move(position, intermediate1, avoid_cars=False) or
+                        self.is_valid_move(position, intermediate2, avoid_cars=False)):
+                        road_dir = self.get_road_direction(next_pos)
+                        neighbors.append((next_pos, road_dir))
 
         return neighbors
     
