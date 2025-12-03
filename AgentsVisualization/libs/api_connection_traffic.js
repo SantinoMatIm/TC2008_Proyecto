@@ -17,9 +17,17 @@ const trafficLights = [];
 const destinations = [];
 const roads = [];
 
+// Callback function to handle new cars (set from visualization)
+let onNewCarsCallback = null;
+
+function setOnNewCarsCallback(callback) {
+    onNewCarsCallback = callback;
+}
+
 // Define the data object
 const initData = {
-    NAgents: 5
+    NAgents: 5,
+    SpawnInterval: 10
 };
 
 
@@ -72,7 +80,10 @@ async function getCars() {
                     cars.push(newCar);
                 }
             } else {
-                // Update the positions of existing cars
+                // Update the positions of existing cars and add new ones
+                const existingCarIds = new Set(cars.map(c => c.id));
+                const newCars = [];
+                
                 for (const car of result.positions) {
                     const current_car = cars.find((object3d) => object3d.id == car.id);
 
@@ -81,7 +92,18 @@ async function getCars() {
                         // Update the car's position
                         current_car.oldPosArray = current_car.posArray;
                         current_car.position = {x: car.x, y: car.y, z: car.z};
+                    } else {
+                        // This is a new car that was spawned, add it to the array
+                        const newCar = new Object3D(car.id, [car.x, car.y, car.z]);
+                        newCar['oldPosArray'] = newCar.posArray;
+                        cars.push(newCar);
+                        newCars.push(newCar);
                     }
+                }
+                
+                // Notify about new cars if callback is set
+                if (newCars.length > 0 && onNewCarsCallback) {
+                    onNewCarsCallback(newCars);
                 }
             }
         }
@@ -232,6 +254,30 @@ async function update() {
     }
 }
 
+/*
+ * Sets the spawn interval for new cars.
+ */
+async function setSpawnInterval(interval) {
+    try {
+        // Send a POST request to the server to set the spawn interval
+        let response = await fetch(agent_server_uri + "setSpawnInterval", {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify({ interval: interval })
+        });
+
+        // Check if the response was successful
+        if (response.ok) {
+            let result = await response.json();
+            console.log(result.message);
+        }
+
+    } catch (error) {
+        // Log any errors that occur during the request
+        console.log(error);
+    }
+}
+
 export {
     cars,
     obstacles,
@@ -244,5 +290,8 @@ export {
     getObstacles,
     getTrafficLights,
     getDestinations,
-    getRoads
+    getRoads,
+    setSpawnInterval,
+    initData,
+    setOnNewCarsCallback
 };

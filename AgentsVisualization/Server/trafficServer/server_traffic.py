@@ -12,6 +12,7 @@ import os
 number_agents = 10
 cityModel = None
 currentStep = 0
+spawn_interval = 10  # Default spawn interval
 
 # This application will be used to interact with WebGL
 app = Flask("Traffic example")
@@ -21,23 +22,25 @@ cors = CORS(app, origins=['http://localhost'])
 @app.route('/init', methods=['GET', 'POST'])
 @cross_origin()
 def initModel():
-    global currentStep, cityModel, number_agents
+    global currentStep, cityModel, number_agents, spawn_interval
 
     if request.method == 'POST':
         try:
-            number_agents = int(request.json.get('NAgents'))
+            number_agents = int(request.json.get('NAgents', 10))
+            spawn_interval = int(request.json.get('SpawnInterval', 10))
             currentStep = 0
         except Exception as e:
             print(e)
             return jsonify({"message": "Error initializing the model"}), 500
 
-    print(f"Model parameters: {number_agents} agents")
+    print(f"Model parameters: {number_agents} agents, spawn interval: {spawn_interval}")
 
     # Create the model using the parameters sent by the application
     cityModel = CityModel(number_agents)
+    cityModel.set_spawn_interval(spawn_interval)
 
     # Return a message saying that the model was created successfully
-    return jsonify({"message": f"Parameters received, model initiated.\nAgents: {number_agents}"})
+    return jsonify({"message": f"Parameters received, model initiated.\nAgents: {number_agents}, Spawn Interval: {spawn_interval}"})
 
 
 # This route will be used to get the positions of the traffic lights
@@ -179,13 +182,34 @@ def updateModel():
     global currentStep, cityModel
     if request.method == 'GET':
         try:
-            # Update the model
-            cityModel.step()
-            currentStep += 1
-            return jsonify({'message': f'Model updated to step {currentStep}.', 'currentStep': currentStep})
+            # Only update the model if it is still running
+            if cityModel.running:
+                cityModel.step()
+                currentStep += 1
+            return jsonify({
+                'message': f'Model updated to step {currentStep}.',
+                'currentStep': currentStep,
+                'running': cityModel.running
+            })
         except Exception as e:
             print(e)
             return jsonify({"message": "Error during step."}), 500
+
+
+# This route will be used to set the spawn interval
+@app.route('/setSpawnInterval', methods=['POST'])
+@cross_origin()
+def setSpawnInterval():
+    global cityModel, spawn_interval
+    if request.method == 'POST':
+        try:
+            spawn_interval = int(request.json.get('interval', 10))
+            if cityModel:
+                cityModel.set_spawn_interval(spawn_interval)
+            return jsonify({'message': f'Spawn interval set to {spawn_interval} steps.', 'interval': spawn_interval})
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error setting spawn interval."}), 500
 
 
 if __name__ == '__main__':

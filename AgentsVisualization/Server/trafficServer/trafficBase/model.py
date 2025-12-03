@@ -55,27 +55,21 @@ class CityModel(Model):
                         self.grid.place_agent(agent, (c, self.height - r - 1))
 
         self.num_agents = N
-
-        # Create cars and place them on random road positions
-        road_positions = []
+        self.steps = 0
+        self.spawn_interval = 10  # Default: spawn every 10 steps
+        self.next_car_id = 0
+        self.cars_can_move = False  # Cars won't move until first spawn
+        self.consecutive_failed_spawns = 0  # Para detectar cuando ya no se pueden agregar coches
+        
+        # Find corner positions with roads
+        self.corner_positions = self._find_corner_positions()
+        
+        # Find all destination positions
+        self.destination_positions = []
         for agents, pos in self.grid.coord_iter():
             for agent in agents:
-                if isinstance(agent, Road):
-                    road_positions.append(pos)
-
-        # Select random road positions for cars
-        import random
-        random.shuffle(road_positions)
-        for i in range(min(N, len(road_positions))):
-            car = Car(f"car_{i}", self)
-            pos = road_positions[i]
-            self.grid.place_agent(car, pos)
-            # Initialize car's facing direction based on road direction
-            cell_contents = self.grid.get_cell_list_contents([pos])
-            for agent in cell_contents:
-                if isinstance(agent, Road):
-                    car.facing_direction = agent.direction
-                    break
+                if isinstance(agent, Destination):
+                    self.destination_positions.append(pos)
 
         self.running = True
 
@@ -131,7 +125,122 @@ class CityModel(Model):
         # Default to "Right" if no neighbors found
         return "Right"
 
+    def _find_corner_positions(self):
+        """
+        Finds road positions at the four corners of the map.
+        Returns: List of 4 positions [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
+        """
+        import random
+        corners = []
+        
+        # Find positions near each corner that have roads
+        # Corner 1: Top-left (near 0, height-1)
+        # Corner 2: Top-right (near width-1, height-1)
+        # Corner 3: Bottom-left (near 0, 0)
+        # Corner 4: Bottom-right (near width-1, 0)
+        
+        corner_targets = [
+            (0, self.height - 1),  # Top-left
+            (self.width - 1, self.height - 1),  # Top-right
+            (0, 0),  # Bottom-left
+            (self.width - 1, 0)  # Bottom-right
+        ]
+        
+        for target_x, target_y in corner_targets:
+            # Find the closest road position to this corner
+            best_pos = None
+            min_dist = float('inf')
+            
+            for agents, pos in self.grid.coord_iter():
+                for agent in agents:
+                    if isinstance(agent, Road):
+                        dist = abs(pos[0] - target_x) + abs(pos[1] - target_y)
+                        if dist < min_dist:
+                            min_dist = dist
+                            best_pos = pos
+            
+            if best_pos:
+                corners.append(best_pos)
+        
+        return corners if len(corners) == 4 else []
+    
+    def spawn_cars_at_corners(self):
+        """
+        Spawns 4 cars at the four corners of the map.
+        Each car gets assigned a random destination from the D positions.
+        """
+        import random
+        
+        if len(self.corner_positions) < 4:
+            return 0
+        
+        if len(self.destination_positions) == 0:
+            return 0
+        
+        spawned = 0
+        for corner_pos in self.corner_positions:
+            # Check if position is safe (no car already there)
+            cell_contents = self.grid.get_cell_list_contents([corner_pos])
+            has_car = any(isinstance(agent, Car) for agent in cell_contents)
+            
+            if not has_car:
+                # Create new car
+                car = Car(f"car_{self.next_car_id}", self)
+                self.next_car_id += 1
+                
+                # Assign random destination
+                destination = random.choice(self.destination_positions)
+                car.destination = destination
+                
+                # Place car at corner
+                self.grid.place_agent(car, corner_pos)
+                spawned += 1
+                
+                # Initialize car's facing direction based on road direction
+                # (buscar de nuevo el contenido de la celda ya con el coche colocado)
+                new_cell_contents = self.grid.get_cell_list_contents([corner_pos])
+                for agent in new_cell_contents:
+                    if isinstance(agent, Road):
+                        car.facing_direction = agent.direction
+                        break
+
+        return spawned
+    
+    def set_spawn_interval(self, interval):
+        """Sets the interval for spawning new cars."""
+        self.spawn_interval = max(1, int(interval))
+    
     def step(self):
         '''Advance the model by one step.'''
-        for agent in self.agents:
-            agent.step()
+        self.steps += 1
+        
+        # Spawn cars at corners if it's time
+        if self.steps % self.spawn_interval == 0:
+            spawned = self.spawn_cars_at_corners()
+
+            if spawned > 0:
+                self.consecutive_failed_spawns = 0
+                # After first successful spawn, allow all cars to move
+                if not self.cars_can_move:
+                    self.cars_can_move = True
+            else:
+                self.consecutive_failed_spawns += 1
+
+        # Only move cars if they're allowed to
+        for agent in list(self.agents):
+            if isinstance(agent, Car):
+                if self.cars_can_move:
+                    agent.step()
+            else:
+                agent.step()
+
+        # Eliminar coches que llegaron a su destino
+        to_remove = [a for a in self.agents if isinstance(a, Car) and getattr(a, "to_be_removed", False)]
+        for car in to_remove:
+            if car in self._agents:
+                self._agents.remove(car)
+
+        # Si consecutivamente no se pueden agregar coches, detener la simulación
+        # (se asume congestión o saturación)
+        if self.consecutive_failed_spawns >= 5:
+            self.running = False

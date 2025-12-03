@@ -237,6 +237,10 @@ class Car(Agent):
         Moves the car using subsumption architecture.
         Each level can inhibit higher levels.
         """
+        # Si el coche ya fue marcado para eliminación, no se mueve más
+        if getattr(self, "to_be_removed", False):
+            return
+
         # Level 0: Avoid collisions (highest priority)
         safe_positions = self.level_0_avoid_collisions()
         
@@ -259,25 +263,19 @@ class Car(Agent):
         target_position = self.level_3_move_toward_destination(preferred_positions)
         
         if target_position:
-            # Update facing direction based on movement
-            dx = target_position[0] - self.pos[0]
-            dy = target_position[1] - self.pos[1]
-            
-            # Determine new facing direction based on movement
-            if dx > 0:
-                self.facing_direction = "Right"
-            elif dx < 0:
-                self.facing_direction = "Left"
-            elif dy > 0:
-                self.facing_direction = "Up"
-            elif dy < 0:
-                self.facing_direction = "Down"
-            
+            # Mover primero el agente en la grilla
             self.model.grid.move_agent(self, target_position)
             
-            # Check if we reached destination
+            # Actualizar facing_direction con la dirección de la calle en la NUEVA posición
+            new_road_dir = self.get_road_direction(self.pos)
+            if new_road_dir is not None:
+                self.facing_direction = new_road_dir
+            
+            # Revisar si llegó a su destino
             if self.destination and self.pos == self.destination:
-                self.destination = None  # Clear destination, will find new one
+                # Marcar para eliminación y quitarlo de la grilla
+                self.to_be_removed = True
+                self.model.grid.remove_agent(self)
     
     def step(self):
         """ 
