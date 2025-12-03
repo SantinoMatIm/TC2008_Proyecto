@@ -1,29 +1,20 @@
 from mesa import Agent
+from collections import deque
 
 class Car(Agent):
     """
-    Agent that moves using a subsumption architecture.
-    Attributes:
-        unique_id: Agent's ID 
-        destination: Target destination position (if assigned)
+    Car agent that uses BFS pathfinding to reach its destination.
     """
     def __init__(self, unique_id, model):
-        """
-        Creates a new car agent.
-        Args:
-            unique_id: The agent's ID
-            model: Model reference for the agent
-        """
         super().__init__(model)
         self.unique_id = unique_id
-        self.destination = None  # Will be set if car has a destination
-        self.facing_direction = None  # Direction the car is facing: "Up", "Down", "Left", "Right"
+        self.destination = None
+        self.facing_direction = None
+        self.path_to_destination = None
+        self.path_calculation_failures = 0  # Track failed path calculations
     
     def get_road_direction(self, position):
-        """
-        Gets the direction of the road at a given position.
-        Returns: "Up", "Down", "Left", "Right", or None
-        """
+        """Gets the direction of the road at a given position."""
         cell_contents = self.model.grid.get_cell_list_contents([position])
         for agent in cell_contents:
             if isinstance(agent, Road):
@@ -31,256 +22,256 @@ class Car(Agent):
         return None
     
     def get_traffic_light_state(self, position):
-        """
-        Gets the state of the traffic light at a given position.
-        Returns: True (green), False (red), or None (no traffic light)
-        """
+        """Gets the state of the traffic light at a given position."""
         cell_contents = self.model.grid.get_cell_list_contents([position])
         for agent in cell_contents:
             if isinstance(agent, Traffic_Light):
                 return agent.state
         return None
     
-    def get_direction_vector(self, direction):
-        """
-        Converts direction string to coordinate offset.
-        Returns: (dx, dy) tuple
-        """
-        direction_map = {
-            "Up": (0, 1),
-            "Down": (0, -1),
-            "Left": (-1, 0),
-            "Right": (1, 0)
-        }
-        return direction_map.get(direction, (0, 0))
+    def has_obstacle(self, position):
+        """Checks if position has an obstacle."""
+        if not (0 <= position[0] < self.model.grid.width and 
+                0 <= position[1] < self.model.grid.height):
+            return True
+        cell_contents = self.model.grid.get_cell_list_contents([position])
+        return any(isinstance(agent, Obstacle) for agent in cell_contents)
     
-    def get_position_in_direction(self, position, direction):
-        """
-        Gets the position in a given direction from a position.
-        """
-        dx, dy = self.get_direction_vector(direction)
-        return (position[0] + dx, position[1] + dy)
-    
-    def has_car_nearby(self, position, min_distance=1):
-        """
-        Checks if there's a car within min_distance cells from the given position.
-        This creates a larger "hitbox" to prevent cars from being too close.
-        """
-        # Check the target position and adjacent cells (orthogonal only)
-        check_positions = [position]
-        check_positions.extend([
-            (position[0] + 1, position[1]),  # Right
-            (position[0] - 1, position[1]),  # Left
-            (position[0], position[1] + 1),  # Up
-            (position[0], position[1] - 1),   # Down
-        ])
-        
-        for check_pos in check_positions:
-            # Check if position is within grid bounds
-            if (0 <= check_pos[0] < self.model.grid.width and 
-                0 <= check_pos[1] < self.model.grid.height):
-                cell_contents = self.model.grid.get_cell_list_contents([check_pos])
-                # Check for other cars (excluding self)
-                for agent in cell_contents:
-                    if isinstance(agent, Car) and agent.unique_id != self.unique_id:
-                        return True
-        return False
-    
-    def is_position_safe(self, position):
-        """
-        Checks if a position is safe to move to (no obstacles, no cars nearby, has road).
-        Returns: True if safe, False otherwise.
-        """
-        # Check if position is within grid bounds
+    def has_car(self, position):
+        """Checks if position has another car."""
         if not (0 <= position[0] < self.model.grid.width and 
                 0 <= position[1] < self.model.grid.height):
             return False
-        
         cell_contents = self.model.grid.get_cell_list_contents([position])
-        
-        # Check for obstacles - never move into obstacles
-        has_obstacle = any(isinstance(agent, Obstacle) for agent in cell_contents)
-        if has_obstacle:
+        for agent in cell_contents:
+            if isinstance(agent, Car) and agent.unique_id != self.unique_id:
+                return True
+        return False
+    
+    def is_valid_move(self, from_pos, to_pos):
+        """
+        Checks if moving from from_pos to to_pos is valid.
+        A move is valid if:
+        1. to_pos has a road
+        2. to_pos doesn't have an obstacle
+        3. The road direction at to_pos allows us to continue (not opposite to our movement)
+        """
+        # Check bounds
+        if not (0 <= to_pos[0] < self.model.grid.width and 
+                0 <= to_pos[1] < self.model.grid.height):
             return False
         
-        # Check for other cars with larger hitbox - never move if car nearby
-        if self.has_car_nearby(position, min_distance=1):
+        # Check obstacle
+        if self.has_obstacle(to_pos):
             return False
         
-        # Check if there's a road - can only move on roads
-        has_road = any(isinstance(agent, Road) for agent in cell_contents)
-        if not has_road:
+        # Check road exists
+        to_road_dir = self.get_road_direction(to_pos)
+        if to_road_dir is None:
+            return False
+        
+        # Calculate movement direction
+        dx = to_pos[0] - from_pos[0]
+        dy = to_pos[1] - from_pos[1]
+        
+        move_dir = None
+        if dx == 1:
+            move_dir = "Right"
+        elif dx == -1:
+            move_dir = "Left"
+        elif dy == 1:
+            move_dir = "Up"
+        elif dy == -1:
+            move_dir = "Down"
+        
+        if move_dir is None:
+            return False
+        
+        # Can't enter a road if we'd be going against traffic
+        # (our movement direction is opposite to the road direction)
+        opposites = {"Up": "Down", "Down": "Up", "Left": "Right", "Right": "Left"}
+        if opposites.get(move_dir) == to_road_dir:
             return False
         
         return True
     
-    def can_turn(self, new_direction):
+    def get_neighbors(self, position):
         """
-        Checks if the car can turn to a new direction.
-        A turn is only allowed if the road in that direction exists and is safe.
+        Gets all valid neighboring positions from current position.
+        Returns list of (next_pos, road_direction) tuples.
         """
-        next_pos = self.get_position_in_direction(self.pos, new_direction)
-        return self.is_position_safe(next_pos)
-    
-    # SUBSumption Architecture - Level 0: Avoid Collisions (Highest Priority)
-    def level_0_avoid_collisions(self):
-        """
-        Level 0: Avoid collisions with other cars and obstacles.
-        Enforces strictly real-world lane following:
-        - The car ONLY moves in the direction of the road under it.
-        - No lateral sidesteps; turns happen implicitly when the road turns.
-        Returns: List with the next forward position if safe, or empty list if it must stop.
-        """
-        safe_positions = []
-
-        # Always align the car's facing direction with the road under it
-        current_road_dir = self.get_road_direction(self.pos)
-        if current_road_dir is None:
-            return []  # Not on a road, do not move
-        self.facing_direction = current_road_dir
-
-        # Compute the next cell strictly along the road direction
-        forward_pos = self.get_position_in_direction(self.pos, current_road_dir)
-
-        # If that position is safe, we move; otherwise, we stop (no lateral moves)
-        if self.is_position_safe(forward_pos):
-            safe_positions.append(forward_pos)
-
-        return safe_positions
-    
-    # SUBSumption Architecture - Level 1: Respect Traffic Lights
-    def level_1_respect_traffic_lights(self, safe_positions):
-        """
-        Level 1: Filter positions based on traffic light states.
-        Returns: List of positions where traffic lights are green or no traffic light exists.
-        """
-        valid_positions = []
+        neighbors = []
+        directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]  # Up, Down, Right, Left
         
-        for position in safe_positions:
-            # Check traffic light at destination
-            traffic_light_state = self.get_traffic_light_state(position)
-            
-            # If no traffic light or green light, position is valid
-            if traffic_light_state is None or traffic_light_state:  # None or True (green)
-                valid_positions.append(position)
-            # If red light, check if we're already at the intersection
-            elif traffic_light_state is False:  # Red light
-                # Don't move into red light positions
-                continue
+        for dx, dy in directions:
+            next_pos = (position[0] + dx, position[1] + dy)
+            if self.is_valid_move(position, next_pos):
+                road_dir = self.get_road_direction(next_pos)
+                neighbors.append((next_pos, road_dir))
         
-        return valid_positions if valid_positions else safe_positions  # If all blocked, return safe positions (will stop)
+        return neighbors
     
-    # SUBSumption Architecture - Level 2: Follow Road Direction
-    def level_2_follow_road_direction(self, valid_positions):
+    def bfs_to_destination(self, start, goal):
         """
-        Level 2: Follow the road direction strictly.
-        Since we already filtered to only valid road direction in level 0,
-        this just returns the valid positions (should be only one).
-        Returns: List of positions following road direction.
+        BFS pathfinding from start to goal.
+        Returns list of positions forming the path, or None if no path exists.
         """
-        if not valid_positions:
-            return []
-        
-        # At this point, valid_positions should only contain the position
-        # in the direction of the current road (no diagonals allowed)
-        return valid_positions
+        if start == goal:
+            return [start]
+
+        # Debug: Check if start and goal have roads
+        start_road = self.get_road_direction(start)
+        goal_road = self.get_road_direction(goal)
+        print(f"[BFS-DEBUG] {self.unique_id} Start {start} has road: {start_road}, Goal {goal} has road: {goal_road}")
+
+        queue = deque([(start, [start])])
+        visited = {start}
+
+        iterations = 0
+        max_iterations = 1000  # Prevent infinite loops
+
+        while queue and iterations < max_iterations:
+            iterations += 1
+            current_pos, path = queue.popleft()
+
+            if current_pos == goal:
+                print(f"[BFS-DEBUG] {self.unique_id} Found path in {iterations} iterations")
+                return path
+
+            # Get all valid neighbors
+            neighbors = self.get_neighbors(current_pos)
+
+            if iterations == 1:  # Only log first iteration
+                print(f"[BFS-DEBUG] {self.unique_id} From {current_pos}, found {len(neighbors)} neighbors: {[n[0] for n in neighbors]}")
+
+            for next_pos, road_dir in neighbors:
+                if next_pos in visited:
+                    continue
+
+                visited.add(next_pos)
+                queue.append((next_pos, path + [next_pos]))
+
+        print(f"[BFS-DEBUG] {self.unique_id} No path found after {iterations} iterations, visited {len(visited)} cells")
+        return None
     
-    # SUBSumption Architecture - Level 3: Move Toward Destination
-    def level_3_move_toward_destination(self, preferred_positions):
-        """
-        Level 3: If destination exists, prefer moves toward destination.
-        Returns: Best position to move toward destination, or preferred positions.
-        """
-        if not preferred_positions:
-            return None
-        
-        # If no destination assigned, return first preferred position
+    def assign_new_destination(self):
+        """Assigns a new reachable destination to the car."""
+        import random
+        destinations = []
+        for agents, pos in self.model.grid.coord_iter():
+            for agent in agents:
+                if isinstance(agent, Destination):
+                    destinations.append(pos)
+
+        if not destinations:
+            return
+
+        # Try to find a reachable destination
+        random.shuffle(destinations)
+        for dest in destinations:
+            if dest != self.destination:  # Don't try the same destination
+                test_path = self.bfs_to_destination(self.pos, dest)
+                if test_path and len(test_path) > 1:
+                    self.destination = dest
+                    self.path_to_destination = None
+                    self.path_calculation_failures = 0
+                    print(f"[NEW-DEST] {self.unique_id} assigned new reachable destination {self.destination}")
+                    return
+
+        # If no reachable destination found, mark car for removal (grid will be cleaned by model)
+        print(f"[STUCK] {self.unique_id} cannot reach any destination, removing from simulation")
+        self.to_be_removed = True
+
+    def calculate_path(self):
+        """Calculate or recalculate path to destination."""
         if self.destination is None:
-            # Try to find a destination if we don't have one
+            return
+
+        if self.path_to_destination is None or len(self.path_to_destination) == 0:
+            path = self.bfs_to_destination(self.pos, self.destination)
+            if path and len(path) > 1:
+                self.path_to_destination = path[1:]  # Remove current position
+                self.path_calculation_failures = 0  # Reset failure counter
+                print(f"[BFS] {self.unique_id} calculated path from {self.pos} to {self.destination}: {len(self.path_to_destination)} steps")
+            else:
+                self.path_to_destination = None
+                self.path_calculation_failures += 1
+                print(f"[BFS] {self.unique_id} NO PATH from {self.pos} to {self.destination} (failures: {self.path_calculation_failures})")
+
+                # If failed too many times, assign a new reachable destination
+                if self.path_calculation_failures >= 5:
+                    print(f"[BFS] {self.unique_id} destination {self.destination} seems unreachable, assigning new destination")
+                    self.assign_new_destination()
+    
+    def move(self):
+        """Move the car following BFS path."""
+        # Already removed
+        if getattr(self, "to_be_removed", False):
+            return
+
+        # Update facing direction
+        road_dir = self.get_road_direction(self.pos)
+        if road_dir:
+            self.facing_direction = road_dir
+
+        # Assign destination if none
+        if self.destination is None:
             destinations = []
             for agents, pos in self.model.grid.coord_iter():
                 for agent in agents:
                     if isinstance(agent, Destination):
                         destinations.append(pos)
-            
             if destinations:
-                # Assign closest destination
-                import math
-                min_dist = float('inf')
-                closest_dest = None
-                for dest in destinations:
-                    dist = math.sqrt((dest[0] - self.pos[0])**2 + (dest[1] - self.pos[1])**2)
-                    if dist < min_dist:
-                        min_dist = dist
-                        closest_dest = dest
-                self.destination = closest_dest
-        
-        if self.destination is None:
-            return preferred_positions[0] if preferred_positions else None
-        
-        # Find position that moves closest to destination
-        import math
-        best_pos = preferred_positions[0]
-        min_dist = float('inf')
-        
-        for pos in preferred_positions:
-            dist_to_dest = math.sqrt((self.destination[0] - pos[0])**2 + 
-                                    (self.destination[1] - pos[1])**2)
-            if dist_to_dest < min_dist:
-                min_dist = dist_to_dest
-                best_pos = pos
-        
-        return best_pos
-    
-    def move(self):
-        """
-        Moves the car using subsumption architecture.
-        Each level can inhibit higher levels.
-        """
-        # Si el coche ya fue marcado para eliminación, no se mueve más
-        if getattr(self, "to_be_removed", False):
-            return
+                import random
+                self.destination = random.choice(destinations)
+                self.path_to_destination = None
+                print(f"[INIT] {self.unique_id} assigned destination {self.destination}")
 
-        # Level 0: Avoid collisions (highest priority)
-        safe_positions = self.level_0_avoid_collisions()
+        # Check if at destination (mark for removal, grid will be cleaned by model)
+        if self.destination and self.pos == self.destination:
+            print(f"[ARRIVED] {self.unique_id} reached destination {self.destination}")
+            self.to_be_removed = True
+            return
         
-        if not safe_positions:
-            return  # Cannot move safely, stay in place
+        # Calculate path if needed
+        self.calculate_path()
         
-        # Level 1: Respect traffic lights
-        valid_positions = self.level_1_respect_traffic_lights(safe_positions)
-        
-        if not valid_positions:
-            return  # Blocked by traffic lights, stay in place
-        
-        # Level 2: Follow road direction
-        preferred_positions = self.level_2_follow_road_direction(valid_positions)
-        
-        if not preferred_positions:
-            return  # No preferred moves, stay in place
-        
-        # Level 3: Move toward destination
-        target_position = self.level_3_move_toward_destination(preferred_positions)
-        
-        if target_position:
-            # Mover primero el agente en la grilla
-            self.model.grid.move_agent(self, target_position)
+        # Follow path
+        if self.path_to_destination and len(self.path_to_destination) > 0:
+            next_pos = self.path_to_destination[0]
             
-            # Actualizar facing_direction con la dirección de la calle en la NUEVA posición
+            # Check if next position is safe (no cars)
+            if self.has_car(next_pos):
+                print(f"[WAIT] {self.unique_id} waiting - car at {next_pos}")
+                return
+            
+            # Check traffic light
+            traffic_light = self.get_traffic_light_state(next_pos)
+            if traffic_light is False:
+                print(f"[WAIT] {self.unique_id} waiting - red light at {next_pos}")
+                return
+            
+            # Move
+            old_pos = self.pos
+            self.model.grid.move_agent(self, next_pos)
+            self.path_to_destination.pop(0)
+            
+            # Update facing direction
             new_road_dir = self.get_road_direction(self.pos)
-            if new_road_dir is not None:
+            if new_road_dir:
                 self.facing_direction = new_road_dir
             
-            # Revisar si llegó a su destino
-            if self.destination and self.pos == self.destination:
-                # Marcar para eliminación y quitarlo de la grilla
+            print(f"[MOVE] {self.unique_id} {old_pos} -> {self.pos} (remaining: {len(self.path_to_destination)}, dest: {self.destination})")
+
+            # Check if arrived (mark for removal, grid will be cleaned by model)
+            if self.pos == self.destination:
+                print(f"[ARRIVED] {self.unique_id} reached destination {self.destination}")
                 self.to_be_removed = True
-                self.model.grid.remove_agent(self)
+        else:
+            # No path available - stay still and try to recalculate next step
+            print(f"[NO-PATH] {self.unique_id} has no path to {self.destination}, staying still")
     
     def step(self):
-        """ 
-        Executes one step of the car's behavior using subsumption architecture.
-        """
         self.move()
 
 class Traffic_Light(Agent):

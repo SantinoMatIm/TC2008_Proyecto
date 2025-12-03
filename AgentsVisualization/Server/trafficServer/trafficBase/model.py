@@ -10,8 +10,22 @@ class CityModel(Model):
         Args:
             N: Number of agents in the simulation
     """
-    def __init__(self, N):
+    def __init__(self, N, spawn_interval=None, model_params=None, **kwargs):
         super().__init__()
+        
+        # Si spawn_interval no se pasó como argumento, intentar obtenerlo de kwargs
+        # (SolaraViz puede pasar parámetros de diferentes maneras)
+        if spawn_interval is None:
+            spawn_interval = kwargs.get('spawn_interval', 10)
+        
+        # Asegurar que spawn_interval sea un entero válido
+        spawn_interval = max(1, int(spawn_interval))
+        
+        # Guardar referencia a model_params para actualización dinámica (usado por Solara)
+        self.model_params = model_params
+        
+        # Log para debug: ver qué parámetros está recibiendo el modelo
+        print(f"[MODEL-INIT] Creating CityModel with N={N}, spawn_interval={spawn_interval}, kwargs={kwargs}")
 
         # Load the map dictionary. The dictionary maps the characters in the map file to the corresponding agent.
         dataDictionary = json.load(open("city_files/mapDictionary.json"))
@@ -51,12 +65,21 @@ class CityModel(Model):
                         self.grid.place_agent(agent, (c, self.height - r - 1))
 
                     elif col == "D":
+                        # Determine road direction for destination by checking neighbors
+                        road_direction = self._get_road_direction_for_traffic_light(lines, r, c, dataDictionary)
+
+                        # Place a road under the destination so cars can reach it
+                        road_agent = Road(f"r_{r*self.width+c}", self, road_direction)
+                        self.grid.place_agent(road_agent, (c, self.height - r - 1))
+
+                        # Place destination on top of the road
                         agent = Destination(f"d_{r*self.width+c}", self)
                         self.grid.place_agent(agent, (c, self.height - r - 1))
 
         self.num_agents = N
         self.steps = 0
-        self.spawn_interval = 10  # Default: spawn every 10 steps
+        # Intervalo de spawn configurable (usado por Solara y por la API REST)
+        self.spawn_interval = 10  # Spawn cars every 10 steps
         self.next_car_id = 0
         self.cars_can_move = False  # Cars won't move until first spawn
         self.consecutive_failed_spawns = 0  # Para detectar cuando ya no se pueden agregar coches
@@ -212,11 +235,43 @@ class CityModel(Model):
     
     def step(self):
         '''Advance the model by one step.'''
+        # DESHABILITADO para debug: spawn_interval está hardcodeado a 100
+        # Si tenemos model_params (desde Solara), verificar si cambió spawn_interval
+        # if self.model_params is not None and "spawn_interval" in self.model_params:
+        #     try:
+        #         slider = self.model_params["spawn_interval"]
+        #         # Intentar diferentes formas de acceder al valor
+        #         if hasattr(slider, 'value'):
+        #             new_interval = slider.value
+        #         elif hasattr(slider, 'get_value'):
+        #             new_interval = slider.get_value()
+        #         elif callable(slider):
+        #             new_interval = slider()
+        #         else:
+        #             new_interval = slider
+        #         
+        #         # Convertir a int si es necesario
+        #         new_interval = int(new_interval)
+        #         
+        #         if new_interval != self.spawn_interval:
+        #             print(f"[MODEL-STEP] Updating spawn_interval from {self.spawn_interval} to {new_interval}")
+        #             self.set_spawn_interval(new_interval)
+        #         else:
+        #             # Log cada 10 steps para verificar que está funcionando
+        #             if self.steps % 10 == 0:
+        #                 print(f"[MODEL-STEP] Current spawn_interval: {self.spawn_interval}, slider value: {new_interval}")
+        #     except Exception as e:
+        #         # Log el error para debug
+        #         if self.steps % 10 == 0:
+        #             print(f"[MODEL-STEP] Error accessing slider value: {e}")
+        
         self.steps += 1
         
         # Spawn cars at corners if it's time
         if self.steps % self.spawn_interval == 0:
+            print(f"[MODEL-STEP] Step {self.steps}: Attempting to spawn cars (spawn_interval={self.spawn_interval})")
             spawned = self.spawn_cars_at_corners()
+            print(f"[MODEL-STEP] Step {self.steps}: Spawned {spawned} cars")
 
             if spawned > 0:
                 self.consecutive_failed_spawns = 0
@@ -237,8 +292,13 @@ class CityModel(Model):
         # Eliminar coches que llegaron a su destino
         to_remove = [a for a in self.agents if isinstance(a, Car) and getattr(a, "to_be_removed", False)]
         for car in to_remove:
-            if car in self._agents:
-                self._agents.remove(car)
+            print(f"[MODEL-CLEANUP] Removing {car.unique_id} from simulation")
+            # Remove from grid if still there
+            if car.pos is not None:
+                self.grid.remove_agent(car)
+            # Remove from agent dict (Mesa uses dict, not list)
+            if car.unique_id in self._agents:
+                del self._agents[car.unique_id]
 
         # Si consecutivamente no se pueden agregar coches, detener la simulación
         # (se asume congestión o saturación)
