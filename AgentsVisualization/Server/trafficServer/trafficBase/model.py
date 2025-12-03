@@ -235,35 +235,6 @@ class CityModel(Model):
     
     def step(self):
         '''Advance the model by one step.'''
-        # DESHABILITADO para debug: spawn_interval está hardcodeado a 100
-        # Si tenemos model_params (desde Solara), verificar si cambió spawn_interval
-        # if self.model_params is not None and "spawn_interval" in self.model_params:
-        #     try:
-        #         slider = self.model_params["spawn_interval"]
-        #         # Intentar diferentes formas de acceder al valor
-        #         if hasattr(slider, 'value'):
-        #             new_interval = slider.value
-        #         elif hasattr(slider, 'get_value'):
-        #             new_interval = slider.get_value()
-        #         elif callable(slider):
-        #             new_interval = slider()
-        #         else:
-        #             new_interval = slider
-        #         
-        #         # Convertir a int si es necesario
-        #         new_interval = int(new_interval)
-        #         
-        #         if new_interval != self.spawn_interval:
-        #             print(f"[MODEL-STEP] Updating spawn_interval from {self.spawn_interval} to {new_interval}")
-        #             self.set_spawn_interval(new_interval)
-        #         else:
-        #             # Log cada 10 steps para verificar que está funcionando
-        #             if self.steps % 10 == 0:
-        #                 print(f"[MODEL-STEP] Current spawn_interval: {self.spawn_interval}, slider value: {new_interval}")
-        #     except Exception as e:
-        #         # Log el error para debug
-        #         if self.steps % 10 == 0:
-        #             print(f"[MODEL-STEP] Error accessing slider value: {e}")
         
         self.steps += 1
         
