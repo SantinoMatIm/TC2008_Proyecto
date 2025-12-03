@@ -1,0 +1,21 @@
+{
+  "hash": "8e164a25",
+  "configHash": "fc6edb1a",
+  "lockfileHash": "e3b0c442",
+  "browserHash": "86592e63",
+  "optimized": {
+    "lil-gui": {
+      "src": "../../AgentsVisualization/node_modules/lil-gui/dist/lil-gui.esm.js",
+      "file": "lil-gui.js",
+      "fileHash": "153399d4",
+      "needsInterop": false
+    },
+    "twgl-base.js": {
+      "src": "../../AgentsVisualization/node_modules/twgl-base.js/dist/5.x/twgl.module.js",
+      "file": "twgl-base__js.js",
+      "fileHash": "26168666",
+      "needsInterop": false
+    }
+  },
+  "chunks": {}
+}
