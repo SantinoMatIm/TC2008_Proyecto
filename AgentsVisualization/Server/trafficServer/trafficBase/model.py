@@ -33,7 +33,7 @@ class CityModel(Model):
         self.traffic_lights = []
 
         # Load the map file. The map file is a text file where each character represents an agent.
-        with open('city_files/2022_base.txt') as baseFile:
+        with open('city_files/2025_base.txt') as baseFile:
             lines = baseFile.readlines()
             self.width = len(lines[0])-1
             self.height = len(lines)
@@ -205,20 +205,20 @@ class CityModel(Model):
             # Check if position is safe (no car already there)
             cell_contents = self.grid.get_cell_list_contents([corner_pos])
             has_car = any(isinstance(agent, Car) for agent in cell_contents)
-            
+
             if not has_car:
                 # Create new car
                 car = Car(f"car_{self.next_car_id}", self)
                 self.next_car_id += 1
-                
-                # Assign random destination
+
+                # Assign completely random destination
                 destination = random.choice(self.destination_positions)
                 car.destination = destination
-                
+
                 # Place car at corner
                 self.grid.place_agent(car, corner_pos)
                 spawned += 1
-                
+
                 # Initialize car's facing direction based on road direction
                 # (buscar de nuevo el contenido de la celda ya con el coche colocado)
                 new_cell_contents = self.grid.get_cell_list_contents([corner_pos])
@@ -269,9 +269,9 @@ class CityModel(Model):
         
         # Spawn cars at corners if it's time
         if self.steps % self.spawn_interval == 0:
-            print(f"[MODEL-STEP] Step {self.steps}: Attempting to spawn cars (spawn_interval={self.spawn_interval})")
+            # print(f"[MODEL-STEP] Step {self.steps}: Attempting to spawn cars (spawn_interval={self.spawn_interval})")
             spawned = self.spawn_cars_at_corners()
-            print(f"[MODEL-STEP] Step {self.steps}: Spawned {spawned} cars")
+            # print(f"[MODEL-STEP] Step {self.steps}: Spawned {spawned} cars")
 
             if spawned > 0:
                 self.consecutive_failed_spawns = 0
@@ -292,7 +292,7 @@ class CityModel(Model):
         # Eliminar coches que llegaron a su destino
         to_remove = [a for a in self.agents if isinstance(a, Car) and getattr(a, "to_be_removed", False)]
         for car in to_remove:
-            print(f"[MODEL-CLEANUP] Removing {car.unique_id} from simulation")
+            # print(f"[MODEL-CLEANUP] Removing {car.unique_id} from simulation")
             # Remove from grid if still there
             if car.pos is not None:
                 self.grid.remove_agent(car)
