@@ -153,8 +153,8 @@ async function addNewCarsToScene(newCars) {
 async function setupObjects(scene, gl, programInfo) {
   // Crear cubos con diferentes colores para calles, destinos y sol
   const roadCube = new Object3D(-100);
-  // DEBUG: ROJO para visualizar las carreteras
-  roadCube.arrays = cubeSingleColor(1, [1.0, 0.0, 0.0, 1.0]);
+  // Gris asfalto para las calles
+  roadCube.arrays = cubeSingleColor(1, [0.25, 0.25, 0.28, 1.0]);
   roadCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, roadCube.arrays);
   roadCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, roadCube.bufferInfo);
 
@@ -170,17 +170,17 @@ async function setupObjects(scene, gl, programInfo) {
   sunCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, sunCube.bufferInfo);
 
   // Cubo amarillo para marcar obstacles del servidor
-  const debugObstacleCube = new Object3D(-115);
-  debugObstacleCube.arrays = cubeSingleColor(1, [1.0, 1.0, 0.0, 1.0]); // Amarillo brillante
-  debugObstacleCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, debugObstacleCube.arrays);
-  debugObstacleCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, debugObstacleCube.bufferInfo);
+  const obstacleCubeTemplate = new Object3D(-115);
+  obstacleCubeTemplate.arrays = cubeSingleColor(1, [1.0, 1.0, 0.0, 1.0]);
+  obstacleCubeTemplate.bufferInfo = twgl.createBufferInfoFromArrays(gl, obstacleCubeTemplate.arrays);
+  obstacleCubeTemplate.vao = twgl.createVAOFromBufferInfo(gl, programInfo, obstacleCubeTemplate.bufferInfo);
 
-  // Cilindro para ruedas - negro, más segmentos para verse mejor
+  // Cilindro para las ruedas de los coches
+  // Usamos 24 lados para que se note cuando gira
   const wheelCylinder = new Object3D(-116);
-  wheelCylinder.arrays = cylinder(24, [0.15, 0.15, 0.15, 1.0]); // Gris oscuro/negro
+  wheelCylinder.arrays = cylinder(24, [0.15, 0.15, 0.15, 1.0]);
   wheelCylinder.bufferInfo = twgl.createBufferInfoFromArrays(gl, wheelCylinder.arrays);
   wheelCylinder.vao = twgl.createVAOFromBufferInfo(gl, programInfo, wheelCylinder.bufferInfo);
-  // Guardar globalmente para usar en setupCar
   window.wheelTemplate = wheelCylinder;
 
   // Césped húmedo - verde oscuro
@@ -249,98 +249,51 @@ async function setupObjects(scene, gl, programInfo) {
   yellowLineCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, yellowLineCube.arrays);
   yellowLineCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, yellowLineCube.bufferInfo);
 
-  // Cargar semáforo con luz verde
-  clearMaterials();
-  const stoplightGreenMtl = `newmtl StopLightMat
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Kd 0.030365 0.179125 0.020979
-Ks 0.500000 0.500000 0.500000
-Ke 0.000000 0.000000 0.000000
-Ni 1.450000
-d 1.000000
-illum 2
+  // Línea blanca para dividir carriles
+  const whiteLineCube = new Object3D(-117);
+  whiteLineCube.arrays = cubeSingleColor(1, [1.0, 1.0, 1.0, 1.0]);
+  whiteLineCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, whiteLineCube.arrays);
+  whiteLineCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, whiteLineCube.bufferInfo);
 
-newmtl GreenLightMat
-Ns 250.000000
-Ka 5.000000 5.000000 5.000000
-Kd 0.200000 1.000000 0.400000
-Ks 0.800000 0.800000 0.800000
-Ke 0.000000 0.000000 0.000000
-Ni 1.500000
-d 1.000000
-illum 2
+  // Cubos para semáforos - hechos con código, no OBJ
+  // Caja negra del semáforo
+  const trafficHousingCube = new Object3D(-200);
+  trafficHousingCube.arrays = cubeSingleColor(1, [0.15, 0.15, 0.15, 1.0]);
+  trafficHousingCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, trafficHousingCube.arrays);
+  trafficHousingCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, trafficHousingCube.bufferInfo);
 
-newmtl AmberLightMat
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Kd 0.100000 0.100000 0.050000
-Ks 0.500000 0.500000 0.500000
-Ke 0.000000 0.000000 0.000000
-Ni 1.500000
-d 1.000000
-illum 2
+  // Luz roja brillante (encendida)
+  const redLightOnCube = new Object3D(-201);
+  redLightOnCube.arrays = cubeSingleColor(1, [1.0, 0.1, 0.1, 1.0]);
+  redLightOnCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, redLightOnCube.arrays);
+  redLightOnCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, redLightOnCube.bufferInfo);
 
-newmtl RedLightMat
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Kd 0.100000 0.000000 0.000000
-Ks 0.500000 0.500000 0.500000
-Ke 0.000000 0.000000 0.000000
-Ni 1.500000
-d 1.000000
-illum 2
-`;
-  loadMtl(stoplightGreenMtl);
-  const stoplightGreenObj = new Object3D(-200);
-  const stoplightData = await fetch('/assets/models/stoplight_1.obj').then(r => r.text());
-  stoplightGreenObj.prepareVAO(gl, programInfo, stoplightData);
+  // Luz roja apagada
+  const redLightOffCube = new Object3D(-202);
+  redLightOffCube.arrays = cubeSingleColor(1, [0.3, 0.05, 0.05, 1.0]);
+  redLightOffCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, redLightOffCube.arrays);
+  redLightOffCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, redLightOffCube.bufferInfo);
 
-  // Cargar semáforo con luz roja
-  clearMaterials();
-  const stoplightRedMtl = `newmtl StopLightMat
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Kd 0.030365 0.179125 0.020979
-Ks 0.500000 0.500000 0.500000
-Ke 0.000000 0.000000 0.000000
-Ni 1.450000
-d 1.000000
-illum 2
+  // Luz verde brillante (encendida)
+  const greenLightOnCube = new Object3D(-203);
+  greenLightOnCube.arrays = cubeSingleColor(1, [0.1, 1.0, 0.3, 1.0]);
+  greenLightOnCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, greenLightOnCube.arrays);
+  greenLightOnCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, greenLightOnCube.bufferInfo);
 
-newmtl GreenLightMat
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Kd 0.000000 0.100000 0.000000
-Ks 0.500000 0.500000 0.500000
-Ke 0.000000 0.000000 0.000000
-Ni 1.500000
-d 1.000000
-illum 2
+  // Luz verde apagada
+  const greenLightOffCube = new Object3D(-204);
+  greenLightOffCube.arrays = cubeSingleColor(1, [0.05, 0.25, 0.08, 1.0]);
+  greenLightOffCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, greenLightOffCube.arrays);
+  greenLightOffCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, greenLightOffCube.bufferInfo);
 
-newmtl AmberLightMat
-Ns 250.000000
-Ka 1.000000 1.000000 1.000000
-Kd 0.100000 0.100000 0.050000
-Ks 0.500000 0.500000 0.500000
-Ke 0.000000 0.000000 0.000000
-Ni 1.500000
-d 1.000000
-illum 2
-
-newmtl RedLightMat
-Ns 250.000000
-Ka 5.000000 5.000000 5.000000
-Kd 1.000000 0.000000 0.000000
-Ks 0.800000 0.800000 0.800000
-Ke 0.000000 0.000000 0.000000
-Ni 1.500000
-d 1.000000
-illum 2
-`;
-  loadMtl(stoplightRedMtl);
-  const stoplightRedObj = new Object3D(-201);
-  stoplightRedObj.prepareVAO(gl, programInfo, stoplightData);
+  // Guardar referencias globales para los templates de semáforo
+  window.trafficLightTemplates = {
+    housing: trafficHousingCube,
+    redOn: redLightOnCube,
+    redOff: redLightOffCube,
+    greenOn: greenLightOnCube,
+    greenOff: greenLightOffCube
+  };
 
   // Los coches se cargarán individualmente con colores random
   const car2023Data = await fetch('/assets/models/car-2023-textures.obj').then(r => r.text());
@@ -410,24 +363,64 @@ illum 2
   // const streetlightData = await fetch('/assets/models/streetlight.obj').then(r => r.text());
   // streetlightObj.prepareVAO(gl, programInfo, streetlightData);
 
-  // Configurar las calles (ROJO para debug) - ESCALADO 3x
+  // Configurar las calles - ESCALADO 3x
+  let lineIndex = 0;
   for (const road of roads) {
     road.arrays = roadCube.arrays;
     road.bufferInfo = roadCube.bufferInfo;
     road.vao = roadCube.vao;
-    // Cubo base es 2x2, scale 1.5 = tamaño 3x3 para llenar celda escalada
     road.scale = { x: 1.5, y: 0.15, z: 1.5 };
-    road.color = [1.0, 0.0, 0.0, 1.0];
+    road.color = [0.25, 0.25, 0.28, 1.0];
 
     // Guardar dirección ANTES de escalar para el mapa de direcciones
     const key = `${Math.round(road.position.x * 3 + 1.5)},${Math.round(road.position.z * 3 + 1.5)}`;
     roadDirectionMap.set(key, road.direction);
 
     // Centrar en la celda escalada (3x + 1.5)
-    road.position.x = road.position.x * 3 + 1.5;
-    road.position.z = road.position.z * 3 + 1.5;
-
+    const scaledX = road.position.x * 3 + 1.5;
+    const scaledZ = road.position.z * 3 + 1.5;
+    road.position.x = scaledX;
+    road.position.z = scaledZ;
     scene.addObject(road);
+
+    // Agregar media línea blanca en el borde del carril
+    // Cuando dos carriles opuestos están juntos, sus medias líneas forman la división
+    const dir = road.direction;
+    const halfOffset = 1.4; // Casi en el borde de la celda (celda es 3x3)
+
+    if (dir === 'Up') {
+      // Carril hacia arriba media línea en el borde derecho (+X)
+      const line = new Object3D(`road-line-${lineIndex++}`, [scaledX + halfOffset, 0.16, scaledZ]);
+      line.arrays = whiteLineCube.arrays;
+      line.bufferInfo = whiteLineCube.bufferInfo;
+      line.vao = whiteLineCube.vao;
+      line.scale = { x: 0.05, y: 0.02, z: 1.2 };
+      scene.addObject(line);
+    } else if (dir === 'Down') {
+      // Carril hacia abajo media línea en el borde izquierdo (-X)
+      const line = new Object3D(`road-line-${lineIndex++}`, [scaledX - halfOffset, 0.16, scaledZ]);
+      line.arrays = whiteLineCube.arrays;
+      line.bufferInfo = whiteLineCube.bufferInfo;
+      line.vao = whiteLineCube.vao;
+      line.scale = { x: 0.05, y: 0.02, z: 1.2 };
+      scene.addObject(line);
+    } else if (dir === 'Right') {
+      // Carril hacia la derecha media línea en el borde inferior (-Z)
+      const line = new Object3D(`road-line-${lineIndex++}`, [scaledX, 0.16, scaledZ - halfOffset]);
+      line.arrays = whiteLineCube.arrays;
+      line.bufferInfo = whiteLineCube.bufferInfo;
+      line.vao = whiteLineCube.vao;
+      line.scale = { x: 1.2, y: 0.02, z: 0.05 };
+      scene.addObject(line);
+    } else if (dir === 'Left') {
+      // Carril hacia la izquierda media línea en el borde superior (+Z)
+      const line = new Object3D(`road-line-${lineIndex++}`, [scaledX, 0.16, scaledZ + halfOffset]);
+      line.arrays = whiteLineCube.arrays;
+      line.bufferInfo = whiteLineCube.bufferInfo;
+      line.vao = whiteLineCube.vao;
+      line.scale = { x: 1.2, y: 0.02, z: 0.05 };
+      scene.addObject(line);
+    }
   }
 
   // Poner cubos amarillos en CADA obstáculo - ESCALADO 3x
@@ -438,37 +431,105 @@ illum 2
     const scaledX = obstacle.position.x * 3 + 1.5;
     const scaledZ = obstacle.position.z * 3 + 1.5;
 
-    const debugCube = new Object3D(`obstacle-${i}`, [scaledX, 1.5, scaledZ]);
-    debugCube.arrays = debugObstacleCube.arrays;
-    debugCube.bufferInfo = debugObstacleCube.bufferInfo;
-    debugCube.vao = debugObstacleCube.vao;
-    // Cubo base es 2x2, scale 1.5 = tamaño 3x3 para llenar celda escalada
-    debugCube.scale = { x: 1.5, y: 1.5, z: 1.5 };
-
-    scene.addObject(debugCube);
+    const obstacleCube = new Object3D(`obstacle-${i}`, [scaledX, 1.5, scaledZ]);
+    obstacleCube.arrays = obstacleCubeTemplate.arrays;
+    obstacleCube.bufferInfo = obstacleCubeTemplate.bufferInfo;
+    obstacleCube.vao = obstacleCubeTemplate.vao;
+    obstacleCube.scale = { x: 1.5, y: 1.5, z: 1.5 };
+    scene.addObject(obstacleCube);
   }
 
-  // Configurar los semáforos
+  // Configurar los semáforos como cabinas flotantes orientadas según la calle
+  const templates = window.trafficLightTemplates;
   for (const light of trafficLights) {
-    // Asignar el modelo según el estado inicial
-    if (light.state) {
-      light.arrays = stoplightGreenObj.arrays;
-      light.bufferInfo = stoplightGreenObj.bufferInfo;
-      light.vao = stoplightGreenObj.vao;
-    } else {
-      light.arrays = stoplightRedObj.arrays;
-      light.bufferInfo = stoplightRedObj.bufferInfo;
-      light.vao = stoplightRedObj.vao;
+    const scaledX = light.position.x * 3 + 1.5;
+    const scaledZ = light.position.z * 3 + 1.5;
+    const floatHeight = 4.5;
+
+    // Buscar la dirección de la calle para orientar el semáforo
+    const lightKey = `${Math.round(scaledX)},${Math.round(scaledZ)}`;
+    const roadDir = roadDirectionMap.get(lightKey);
+
+    // Calcular offsets para las luces según la orientación
+    // Las luces deben sobresalir hacia donde vienen los coches (opuesto a la dirección)
+    let lightOffsetX = 0;
+    let lightOffsetZ = 0;
+    let housingScaleX = 0.6;
+    let housingScaleZ = 0.4;
+    let rotation = 0;
+
+    switch (roadDir) {
+      case 'Up':
+        // Coches van hacia +Z, semáforo mira hacia -Z
+        lightOffsetZ = -0.5;
+        rotation = Math.PI;
+        break;
+      case 'Down':
+        // Coches van hacia -Z, semáforo mira hacia +Z
+        lightOffsetZ = 0.5;
+        rotation = 0;
+        break;
+      case 'Right':
+        // Coches van hacia +X, semáforo mira hacia -X
+        lightOffsetX = -0.5;
+        housingScaleX = 0.4;
+        housingScaleZ = 0.6;
+        rotation = -Math.PI / 2;
+        break;
+      case 'Left':
+        // Coches van hacia -X, semáforo mira hacia +X
+        lightOffsetX = 0.5;
+        housingScaleX = 0.4;
+        housingScaleZ = 0.6;
+        rotation = Math.PI / 2;
+        break;
+      default:
+        lightOffsetZ = 0.5;
+        break;
     }
-    light.scale = { x: 3.0, y: 3.0, z: 3.0 };
-    // Centrar en la celda escalada
-    light.position.x = light.position.x * 3 + 1.5;
-    light.position.z = light.position.z * 3 + 1.5;
-    light.position.y = 0;
-    // Guardar referencias para cambiar después
-    light.greenModel = { arrays: stoplightGreenObj.arrays, bufferInfo: stoplightGreenObj.bufferInfo, vao: stoplightGreenObj.vao };
-    light.redModel = { arrays: stoplightRedObj.arrays, bufferInfo: stoplightRedObj.bufferInfo, vao: stoplightRedObj.vao };
-    scene.addObject(light);
+
+    // Crear la caja negra del semáforo (housing)
+    const housing = new Object3D(`tl-housing-${light.id}`, [scaledX, floatHeight, scaledZ]);
+    housing.arrays = templates.housing.arrays;
+    housing.bufferInfo = templates.housing.bufferInfo;
+    housing.vao = templates.housing.vao;
+    housing.scale = { x: housingScaleX, y: 1.5, z: housingScaleZ };
+    housing.rotRad.y = rotation;
+    scene.addObject(housing);
+
+    // Crear luz roja (arriba) - sobresale en la dirección correcta
+    const redLight = new Object3D(`tl-red-${light.id}`, [
+      scaledX + lightOffsetX,
+      floatHeight + 0.45,
+      scaledZ + lightOffsetZ
+    ]);
+    redLight.arrays = light.state ? templates.redOff.arrays : templates.redOn.arrays;
+    redLight.bufferInfo = light.state ? templates.redOff.bufferInfo : templates.redOn.bufferInfo;
+    redLight.vao = light.state ? templates.redOff.vao : templates.redOn.vao;
+    redLight.scale = { x: 0.35, y: 0.35, z: 0.35 };
+    scene.addObject(redLight);
+
+    // Crear luz verde (abajo) - sobresale en la dirección correcta
+    const greenLight = new Object3D(`tl-green-${light.id}`, [
+      scaledX + lightOffsetX,
+      floatHeight - 0.45,
+      scaledZ + lightOffsetZ
+    ]);
+    greenLight.arrays = light.state ? templates.greenOn.arrays : templates.greenOff.arrays;
+    greenLight.bufferInfo = light.state ? templates.greenOn.bufferInfo : templates.greenOff.bufferInfo;
+    greenLight.vao = light.state ? templates.greenOn.vao : templates.greenOff.vao;
+    greenLight.scale = { x: 0.35, y: 0.35, z: 0.35 };
+    scene.addObject(greenLight);
+
+    // Guardar referencias a los componentes
+    light.housingObj = housing;
+    light.redLightObj = redLight;
+    light.greenLightObj = greenLight;
+
+    // Guardar posición para el sistema de luces del shader
+    light.position.x = scaledX;
+    light.position.z = scaledZ;
+    light.position.y = floatHeight;
   }
 
   // Configurar los destinos (donde van los coches)
@@ -617,11 +678,12 @@ illum 2
   scene.addObject(lightning);
 
   // Generar 800 objetos de flora alrededor del mapa (optimizado para rendimiento)
-  const cityMinX = -1;
-  const cityMaxX = 25;
-  const cityMinZ = -1;
-  const cityMaxZ = 25;
-  const minSeparation = 4;
+  // Ciudad es 36x35 celdas escaladas 3x = 108x105 unidades
+  const cityMinX = -3;
+  const cityMaxX = 111;
+  const cityMinZ = -3;
+  const cityMaxZ = 108;
+  const minSeparation = 5;
   const worldLimit = 300;
 
   for (let i = 0; i < 800; i++) {
@@ -736,25 +798,25 @@ illum 2
   }
 }
 
-// Función helper para configurar un carro (puede ser llamada después de la inicialización)
+// Configura un coche nuevo con modelo aleatorio, color aleatorio y sus 4 ruedas
 async function setupCar(car, gl, programInfo, car2023Data, car2024Data) {
-  // Solo configurar si el carro no está ya configurado
+  // Si ya está configurado no hacer nada
   if (car.isCar2024 !== undefined) {
     return;
   }
 
+  // 50% de probabilidad de usar cada modelo
   const useCar2023 = Math.random() < 0.5;
 
-  // Generar un color random para el cuerpo del coche
-  const randomR = Math.random() * 0.7 + 0.3; // 0.3 a 1.0
+  // Color aleatorio para la carrocería, valores entre 0.3 y 1.0 para que no sea muy oscuro
+  const randomR = Math.random() * 0.7 + 0.3;
   const randomG = Math.random() * 0.7 + 0.3;
   const randomB = Math.random() * 0.7 + 0.3;
 
-  // Limpiar materiales previos
   clearMaterials();
 
   if (useCar2023) {
-    // Car 2023 solo tiene un material, así que todo el coche será del color random
+    // El modelo 2023 es más simple, tiene un solo material para todo
     const car2023Mtl = `newmtl CarMat
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
@@ -767,11 +829,11 @@ illum 2
 `;
     loadMtl(car2023Mtl);
     car.prepareVAO(gl, programInfo, car2023Data);
-    car.scale = { x: 0.9, y: 0.9, z: 0.9 };  // Escala para igualar visualmente al car 2024
-    car.yOffset = 0.1;
+    car.scale = { x: 0.9, y: 0.9, z: 0.9 };
+    car.yOffset = 0.1;  // Elevar un poco el coche para que las ruedas toquen el suelo
     car.isCar2024 = false;
   } else {
-    // Car 2024 tiene materiales separados: cuerpo random, ventanas azul claro
+    // El modelo 2024 tiene varios materiales: carrocería, ventanas, detalles y luces
     const car2024Mtl = `newmtl CarBodyMat
 Ns 640.000000
 Ka 0.700000 0.700000 0.700000
@@ -824,30 +886,28 @@ illum 2
     car.color = [1.0, 0.8, 0.0, 1.0];
     scene.addObject(car);
 
-    // Crear 4 ruedas para el coche
+    // Agregar las 4 ruedas al coche
     const wheelTemplate = window.wheelTemplate;
     if (wheelTemplate) {
       car.wheels = [];
-      car.wheelRotation = 0; // Rotación de las ruedas (animación)
+      car.wheelRotation = 0;
 
-      // Posiciones relativas de las ruedas según el modelo (escaladas del debug)
-      // Ruedas a nivel del suelo (y=0), coche elevado con yOffset
+      // Cada modelo de coche tiene diferentes posiciones para las ruedas
       let wheelPositions;
       let wheelScale;
-      let wheelRotAxis; // 'x' o 'z' para orientar el cilindro horizontal
+      let wheelRotAxis;
 
       if (car.isCar2024) {
-        // Car 2024 - NO TOCAR
         wheelPositions = [
-          { x: 1.6, y: 0.2, z: 0.7 },
-          { x: -1.6, y: 0.2, z: 0.7 },
-          { x: 1.6, y: 0.2, z: -0.7 },
-          { x: -1.6, y: 0.2, z: -0.7 }
+          { x: 1.6, y: 0.2, z: 0.7 },    // delantera derecha
+          { x: -1.6, y: 0.2, z: 0.7 },   // delantera izquierda
+          { x: 1.6, y: 0.2, z: -0.7 },   // trasera derecha
+          { x: -1.6, y: 0.2, z: -0.7 }   // trasera izquierda
         ];
+        // La escala z es diferente a x para que se vea el giro (elipse, no círculo)
         wheelScale = { x: 0.3, y: 0.25, z: 0.33 };
         wheelRotAxis = 'x';
       } else {
-        // Car 2023
         wheelPositions = [
           { x: 1.0, y: 0.2, z: 0.8 },
           { x: -1.0, y: 0.2, z: 0.8 },
@@ -858,15 +918,17 @@ illum 2
         wheelRotAxis = 'z';
       }
 
+      // Crear cada rueda y pegarla al coche
       for (let i = 0; i < 4; i++) {
         const wheel = new Object3D(`wheel-${car.id}-${i}`, [0, 0, 0]);
         wheel.arrays = wheelTemplate.arrays;
         wheel.bufferInfo = wheelTemplate.bufferInfo;
         wheel.vao = wheelTemplate.vao;
         wheel.scale = wheelScale;
-        wheel.relativePos = wheelPositions[i]; // Posición relativa al coche
-        wheel.wheelRotAxis = wheelRotAxis; // Guardar eje de rotación
-        // Orientar cilindro horizontal
+        wheel.relativePos = wheelPositions[i];
+        wheel.wheelRotAxis = wheelRotAxis;
+
+        // Acostar el cilindro para que quede horizontal
         if (wheelRotAxis === 'x') {
           wheel.rotRad.x = Math.PI / 2;
         } else {
@@ -880,28 +942,17 @@ illum 2
   }
 
 
-// Función para dibujar un objeto con todas sus transformaciones
+// Dibuja cualquier objeto de la escena con su posición, rotación y escala
+// También se encarga de dibujar las ruedas de los coches y cambiar el modelo del semáforo
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
-  // No dibujar gotas de lluvia si no están visibles
+  // Saltar objetos invisibles
   if (object.visible === false) return;
 
-  // Las ruedas se dibujan junto con su coche, no por separado
+  // Las ruedas no se dibujan aquí, se dibujan cuando se dibuja el coche
   if (object.isWheel) return;
 
-  // Actualizar modelo del semáforo según su estado
-  if (trafficLights.includes(object)) {
-    if (object.state) {
-      object.arrays = object.greenModel.arrays;
-      object.bufferInfo = object.greenModel.bufferInfo;
-      object.vao = object.greenModel.vao;
-    } else {
-      object.arrays = object.redModel.arrays;
-      object.bufferInfo = object.redModel.bufferInfo;
-      object.vao = object.redModel.vao;
-    }
-  }
 
-  // Marcar si es el sol, el rayo o el túnel de luz para aplicar iluminación especial
+  // Estos objetos especiales brillan solos, no les afecta la iluminación normal
   const isSun = object.id === -999;
   const isLightning = object.id === 'lightning';
   const isLightTunnel = object.id === 'light-tunnel' || object.id === 'light-tunnel-outer';
@@ -941,19 +992,16 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
   let v3_tra = object.posArray;
   let v3_sca = object.scaArray;
 
-  // Si es un coche, alinéalo con la dirección de la calle bajo él
+  // Los coches necesitan tratamiento especial
   if (cars.includes(object)) {
-    // INTERPOLACIÓN SUAVE: Mezclar entre posición anterior y actual
+    // Interpolar la posición entre el frame anterior y el actual para que se vea suave
     if (object.oldPosArray && fract < 1.0) {
       const oldX = object.oldPosArray[0];
       const oldY = object.oldPosArray[1];
       const oldZ = object.oldPosArray[2];
-
       const newX = object.posArray[0];
       const newY = object.posArray[1];
       const newZ = object.posArray[2];
-
-      // Interpolar linealmente entre oldPos y newPos
       v3_tra = [
         oldX + (newX - oldX) * fract,
         oldY + (newY - oldY) * fract,
@@ -961,15 +1009,15 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
       ];
     }
 
+    // Ver en qué calle está el coche y hacia dónde apunta esa calle
     const key = `${Math.round(object.position.x)},${Math.round(object.position.z)}`;
     const dir = roadDirectionMap.get(key);
 
     if (dir) {
-      // El car-2024 tiene una orientación diferente en su modelo 3D
-      // Necesita una rotación base de -90 grados para alinearse correctamente
+      // El modelo 2024 viene orientado diferente, hay que compensar
       const baseRotation = object.isCar2024 ? -Math.PI / 2 : 0;
 
-      // Mapear la dirección lógica a un ángulo de rotación en Y
+      // Girar el coche según la dirección de la calle
       switch (dir) {
         case 'Up':
           object.rotRad.y = 0 + baseRotation;
@@ -986,66 +1034,56 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
       }
     }
 
-    // Aplicar offset en Y para los coches (para que no floten)
+    // Subir un poco el coche para que las ruedas queden bien
     if (object.yOffset !== undefined) {
       v3_tra = [v3_tra[0], v3_tra[1] + object.yOffset, v3_tra[2]];
     }
   }
 
-  // Crear las matrices de transformación individuales
+  // Crear matrices para cada transformación: escala, rotación en cada eje, y posición
   const scaMat = M4.scale(v3_sca);
   const rotXMat = M4.rotationX(object.rotRad.x);
   const rotYMat = M4.rotationY(object.rotRad.y);
   const rotZMat = M4.rotationZ(object.rotRad.z);
   const traMat = M4.translation(v3_tra);
 
-  // Combinar todas las transformaciones en una sola matriz
+  // Multiplicar todas las matrices en orden: escala, rotaciones, traslación
   let transforms = M4.identity();
   transforms = M4.multiply(scaMat, transforms);
   transforms = M4.multiply(rotXMat, transforms);
   transforms = M4.multiply(rotYMat, transforms);
   transforms = M4.multiply(rotZMat, transforms);
   transforms = M4.multiply(traMat, transforms);
-
   object.matrix = transforms;
 
-  // Calcular matrices para la iluminación
+  // Matrices que necesita el shader para calcular la iluminación
   const worldMatrix = transforms;
   const worldViewProjectionMatrix = M4.multiply(viewProjectionMatrix, transforms);
   const worldInverseTranspose = M4.transpose(M4.inverse(worldMatrix));
 
-  // Obtener el sol
   const sun = scene.lights[0];
 
-  // Si es el sol, el rayo o el túnel de luz, usar iluminación completa para que brille por sí mismo
+  // Objetos que brillan solos (sol, rayos) no reciben iluminación normal
   const ambientLight = (isSun || isLightning || isLightTunnel) ? [1.0, 1.0, 1.0, 1.0] : sun.ambient;
   const diffuseLight = (isSun || isLightning || isLightTunnel) ? [0.0, 0.0, 0.0, 1.0] : sun.diffuse;
   const specularLight = (isSun || isLightning || isLightTunnel) ? [0.0, 0.0, 0.0, 1.0] : sun.specular;
 
-  // Preparar arrays de posiciones y colores de semáforos Y postes de luz
+  // Los semáforos emiten luz verde o roja que afecta a los objetos cercanos
   const allLightPositions = [];
   const allLightColors = [];
 
-  // Agregar semáforos
   for (const light of trafficLights) {
-    // Posición del semáforo elevada para simular la luz desde arriba
     allLightPositions.push(light.position.x, light.position.y + 4.5, light.position.z);
-
-    // Color según el estado del semáforo
     if (light.state) {
-      // Verde brillante
-      allLightColors.push(0.2, 1.0, 0.4, 1.0);
+      allLightColors.push(0.2, 1.0, 0.4, 1.0);  // verde
     } else {
-      // Rojo brillante
-      allLightColors.push(1.0, 0.0, 0.0, 1.0);
+      allLightColors.push(1.0, 0.0, 0.0, 1.0);  // rojo
     }
   }
 
-  // (Postes de luz eliminados para mejorar rendimiento)
-
   const totalLights = trafficLights.length;
 
-  // Pasar toda la info de iluminación a los shaders
+  // Mandar todos los datos de iluminación al shader
   let objectUniforms = {
     u_lightWorldPosition: sun.posArray,
     u_viewWorldPosition: scene.camera.posArray,
@@ -1070,53 +1108,47 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
   gl.bindVertexArray(object.vao);
   twgl.drawBufferInfo(gl, object.bufferInfo);
 
-  // Si es un coche con ruedas, dibujarlas
+  // Dibujar las ruedas del coche
   if (cars.includes(object) && object.wheels) {
-    // Animar rotación de ruedas basado en movimiento
+    // Calcular cuánto se movió el coche para animar las ruedas
     if (object.oldPosArray) {
       const dx = object.posArray[0] - object.oldPosArray[0];
       const dz = object.posArray[2] - object.oldPosArray[2];
       const distance = Math.sqrt(dx * dx + dz * dz);
-      // Rotar ruedas proporcional a la distancia recorrida
       object.wheelRotation += distance * 0.5 * fract;
     }
 
-    // Dibujar cada rueda
     for (const wheel of object.wheels) {
-      // Calcular posición de la rueda en coordenadas del mundo
+      // Calcular dónde va la rueda en el mundo
+      // Hay que rotar la posición relativa según hacia dónde mira el coche
       const cosY = Math.cos(object.rotRad.y);
       const sinY = Math.sin(object.rotRad.y);
       const relX = wheel.relativePos.x;
       const relZ = wheel.relativePos.z;
-
-      // Rotar la posición relativa según la orientación del coche
       const rotatedX = relX * cosY - relZ * sinY;
       const rotatedZ = relX * sinY + relZ * cosY;
 
-      // Posición final de la rueda
       const wheelPos = [
         v3_tra[0] + rotatedX,
         v3_tra[1] + wheel.relativePos.y,
         v3_tra[2] + rotatedZ
       ];
 
-      // Crear transformaciones para la rueda
-      // Orden: Scale -> Orientar cilindro -> Animar giro -> Seguir coche -> Trasladar
+      // Armar la matriz de transformación de la rueda
       const wheelScaMat = M4.scale(wheel.scaArray);
       const wheelTraMat = M4.translation(wheelPos);
-      const wheelRotYMat = M4.rotationY(object.rotRad.y); // Seguir dirección del coche
+      const wheelRotYMat = M4.rotationY(object.rotRad.y);
 
       let wheelTransforms = M4.identity();
       wheelTransforms = M4.multiply(wheelScaMat, wheelTransforms);
 
+      // Aplicar animación y orientación según el modelo
       if (wheel.wheelRotAxis === 'x') {
-        // Car 2024 - NO TOCAR
         const wheelAnimMat = M4.rotationY(object.wheelRotation);
         const wheelOrientMat = M4.rotationX(Math.PI / 2);
         wheelTransforms = M4.multiply(wheelAnimMat, wheelTransforms);
         wheelTransforms = M4.multiply(wheelOrientMat, wheelTransforms);
       } else {
-        // Car 2023 - misma rueda, misma animación Y, solo diferente orientación Z
         const wheelAnimMat = M4.rotationY(object.wheelRotation);
         const wheelOrientMat = M4.rotationZ(Math.PI / 2);
         wheelTransforms = M4.multiply(wheelAnimMat, wheelTransforms);
@@ -1130,7 +1162,6 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
       const wheelWorldViewProjection = M4.multiply(viewProjectionMatrix, wheelTransforms);
       const wheelWorldInverseTranspose = M4.transpose(M4.inverse(wheelWorldMatrix));
 
-      // Uniforms para la rueda
       let wheelUniforms = {
         u_lightWorldPosition: sun.posArray,
         u_viewWorldPosition: scene.camera.posArray,
@@ -1158,66 +1189,49 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
   }
 }
 
-// Loop principal que dibuja todo en cada frame
+// Se llama en cada frame para dibujar toda la escena
 async function drawScene() {
-  // Calcular tiempo transcurrido
+  // Calcular cuánto tiempo pasó desde el último frame
   let now = Date.now();
-
-  // Inicializar 'then' en el primer frame
-  if (then === 0) {
-    then = now;
-  }
-
+  if (then === 0) then = now;
   let deltaTime = now - then;
   elapsed += deltaTime;
-  let fract = Math.min(1.0, elapsed / duration);
+  let fract = Math.min(1.0, elapsed / duration);  // fract va de 0 a 1 para interpolar movimientos
   then = now;
 
-  // Limpiar el canvas
+  // Limpiar pantalla con negro
   gl.clearColor(0.0, 0.0, 0.0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-  // Habilitar culling y depth test
   gl.enable(gl.CULL_FACE);
   gl.enable(gl.DEPTH_TEST);
 
-  // Actualizar lluvia
+  // Mover las gotas de lluvia hacia abajo
   if (isRaining) {
     for (let drop of rainDrops) {
       drop.visible = true;
-      // Mover gota hacia abajo
       drop.position.y -= drop.velocity;
-
-      // Si llega al suelo, reiniciar arriba (dentro del mundo)
+      // Cuando llega al suelo, reiniciar arriba en posición aleatoria
       if (drop.position.y < 0) {
-        drop.position.y = Math.random() * 20 + 50; // Entre 50 y 70
-        drop.position.x = Math.random() * 600 - 300; // -300 a 300
-        drop.position.z = Math.random() * 600 - 300; // -300 a 300
+        drop.position.y = Math.random() * 20 + 50;
+        drop.position.x = Math.random() * 600 - 300;
+        drop.position.z = Math.random() * 600 - 300;
       }
     }
   } else {
-    // Ocultar todas las gotas cuando no llueve
     for (let drop of rainDrops) {
       drop.visible = false;
     }
   }
 
-  // Actualizar rayo
+  // Sistema de rayos que aparecen cada cierto tiempo
   lightningTimer += deltaTime;
-
-  // Disparar rayo cuando se alcanza el tiempo programado
-  // Nota: 'lightning' puede ser null si aún no se ha creado el objeto.
-  // Para evitar errores en tiempo de ejecución, solo actualizar si existe.
   if (lightning && lightningTimer >= nextLightningTime && lightningDuration <= 0) {
-    // Posicionar rayo en la ciudad
     lightning.position.x = Math.random() * 30;
     lightning.position.z = Math.random() * 30;
     lightning.visible = true;
-    lightningDuration = 200; // 200ms de duración
-    nextLightningTime = lightningTimer + lightningInterval; // Siguiente rayo en 15 segundos
+    lightningDuration = 200;
+    nextLightningTime = lightningTimer + lightningInterval;
   }
-
-  // Desactivar rayo después de la duración
   if (lightning && lightningDuration > 0) {
     lightningDuration -= deltaTime;
     if (lightningDuration <= 0) {
@@ -1228,18 +1242,43 @@ async function drawScene() {
   scene.camera.checkKeys();
   const viewProjectionMatrix = setupViewProjection(gl);
 
-  // Dibujar primero todos los objetos opacos (sin blending)
+  // Actualizar colores de las luces del semáforo según el estado actual
+  const templates = window.trafficLightTemplates;
+  if (templates) {
+    for (const light of trafficLights) {
+      if (light.redLightObj && light.greenLightObj) {
+        if (light.state) {
+          // Verde encendido, rojo apagado
+          light.redLightObj.arrays = templates.redOff.arrays;
+          light.redLightObj.bufferInfo = templates.redOff.bufferInfo;
+          light.redLightObj.vao = templates.redOff.vao;
+          light.greenLightObj.arrays = templates.greenOn.arrays;
+          light.greenLightObj.bufferInfo = templates.greenOn.bufferInfo;
+          light.greenLightObj.vao = templates.greenOn.vao;
+        } else {
+          // Rojo encendido, verde apagado
+          light.redLightObj.arrays = templates.redOn.arrays;
+          light.redLightObj.bufferInfo = templates.redOn.bufferInfo;
+          light.redLightObj.vao = templates.redOn.vao;
+          light.greenLightObj.arrays = templates.greenOff.arrays;
+          light.greenLightObj.bufferInfo = templates.greenOff.bufferInfo;
+          light.greenLightObj.vao = templates.greenOff.vao;
+        }
+      }
+    }
+  }
+
+  // Primero dibujar objetos sólidos (todo menos la lluvia)
   gl.disable(gl.BLEND);
   gl.useProgram(colorProgramInfo.program);
   for (let object of scene.objects) {
-    // Dibujar solo objetos que NO son gotas de lluvia
     const isRainDrop = object.id && object.id.toString().startsWith('rain-');
     if (!isRainDrop) {
       drawObject(gl, colorProgramInfo, object, viewProjectionMatrix, fract);
     }
   }
 
-  // Luego dibujar las gotas de lluvia con blending
+  // Después dibujar la lluvia con transparencia
   if (isRaining) {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -1252,7 +1291,7 @@ async function drawScene() {
     gl.disable(gl.BLEND);
   }
 
-  // Actualizar la simulación cada cierto tiempo
+  // Cada segundo pedir al servidor la nueva posición de los coches
   if (elapsed >= duration) {
     elapsed = 0;
     await update();
@@ -1261,33 +1300,27 @@ async function drawScene() {
   requestAnimationFrame(drawScene);
 }
 
+// Calcula la matriz de vista y proyección de la cámara
 function setupViewProjection(gl) {
-  // Campo de visión de 60 grados
   const fov = 60 * Math.PI / 180;
   const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-
-  // Crear matrices de proyección y vista (aumentar far plane para ver más lejos)
   const projectionMatrix = M4.perspective(fov, aspect, 1, 500);
 
   const cameraPosition = scene.camera.posArray;
   const target = scene.camera.targetArray;
   const up = [0, 1, 0];
-
   const cameraMatrix = M4.lookAt(cameraPosition, target, up);
   const viewMatrix = M4.inverse(cameraMatrix);
-  const viewProjectionMatrix = M4.multiply(projectionMatrix, viewMatrix);
 
-  return viewProjectionMatrix;
+  return M4.multiply(projectionMatrix, viewMatrix);
 }
 
-// Crear la interfaz para controlar el sol
+// Crea los controles de la interfaz con lil-gui
 function setupUI() {
   const gui = new GUI();
 
-  // Control de spawn de carros
-  const spawnControls = {
-    spawnInterval: initData.SpawnInterval
-  };
+  // Cada cuántos pasos aparece un coche nuevo
+  const spawnControls = { spawnInterval: initData.SpawnInterval };
   const spawnFolder = gui.addFolder('Car Spawning');
   spawnFolder.add(spawnControls, 'spawnInterval', 1, 50, 1).name('Spawn Interval (steps)').onChange(async (value) => {
     spawnControls.spawnInterval = value;
@@ -1296,6 +1329,7 @@ function setupUI() {
   });
   spawnFolder.open();
 
+  // Posición de la luna
   const sun = scene.lights[0];
   const lightFolder = gui.addFolder('Moon Light');
   lightFolder.add(sun.position, 'x', -50, 50).name('Position X');
@@ -1303,7 +1337,7 @@ function setupUI() {
   lightFolder.add(sun.position, 'z', -50, 50).name('Position Z');
   lightFolder.open();
 
-  // Controles de intensidad de luz
+  // Qué tan fuerte brilla cada tipo de luz
   const intensityFolder = gui.addFolder('Light Intensity');
   intensityFolder.add({ sunIntensity }, 'sunIntensity', 0, 3).name('Moon Intensity').onChange((value) => {
     sunIntensity = value;
@@ -1316,35 +1350,27 @@ function setupUI() {
   });
   intensityFolder.open();
 
-  // Control de clima
+  // Controles del clima
   const weatherFolder = gui.addFolder('Weather');
   weatherFolder.add({ rain: isRaining }, 'rain').name('Rain').onChange((value) => {
     isRaining = value;
   });
-
-  // Botón para activar rayo manualmente
   const lightningControls = {
     triggerLightning: () => {
-      // Posicionar rayo en la ciudad
       lightning.position.x = Math.random() * 30;
       lightning.position.z = Math.random() * 30;
       lightning.visible = true;
-      lightningDuration = 200; // 200ms de duración
-      // NO resetear el timer para no romper el ciclo automático
+      lightningDuration = 200;
     }
   };
   weatherFolder.add(lightningControls, 'triggerLightning').name('Lightning Strike');
   weatherFolder.open();
 
-  // Controles de cámara
+  // Zoom de cámara
   const cameraFolder = gui.addFolder('Camera');
   const cameraControls = {
-    zoomIn: () => {
-      scene.camera.zoom(-2);
-    },
-    zoomOut: () => {
-      scene.camera.zoom(2);
-    }
+    zoomIn: () => { scene.camera.zoom(-2); },
+    zoomOut: () => { scene.camera.zoom(2); }
   };
   cameraFolder.add(cameraControls, 'zoomIn').name('Zoom In (+)');
   cameraFolder.add(cameraControls, 'zoomOut').name('Zoom Out (-)');

@@ -23,9 +23,6 @@ class CityModel(Model):
         
         # Guardar referencia a model_params para actualización dinámica (usado por Solara)
         self.model_params = model_params
-        
-        # Log para debug: ver qué parámetros está recibiendo el modelo
-        print(f"[MODEL-INIT] Creating CityModel with N={N}, spawn_interval={spawn_interval}, kwargs={kwargs}")
 
         # Load the map dictionary. The dictionary maps the characters in the map file to the corresponding agent.
         dataDictionary = json.load(open("city_files/mapDictionary.json"))
