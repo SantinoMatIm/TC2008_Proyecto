@@ -80,7 +80,12 @@ class CityModel(Model):
         self.next_car_id = 0
         self.cars_can_move = False  # Cars won't move until first spawn
         self.consecutive_failed_spawns = 0  # Para detectar cuando ya no se pueden agregar coches
-        
+
+        # Simulation metrics
+        self.total_cars_spawned = 0  # Total cars spawned during simulation
+        self.cars_reached_destination = 0  # Total cars that reached their destination
+        self.current_cars_in_simulation = 0  # Current number of cars in simulation
+
         # Find corner positions with roads
         self.corner_positions = self._find_corner_positions()
         
@@ -216,6 +221,10 @@ class CityModel(Model):
                 self.grid.place_agent(car, corner_pos)
                 spawned += 1
 
+                # Update metrics
+                self.total_cars_spawned += 1
+                self.current_cars_in_simulation += 1
+
                 # Initialize car's facing direction based on road direction
                 # (buscar de nuevo el contenido de la celda ya con el coche colocado)
                 new_cell_contents = self.grid.get_cell_list_contents([corner_pos])
@@ -267,6 +276,10 @@ class CityModel(Model):
             # Remove from agent dict (Mesa uses dict, not list)
             if car.unique_id in self._agents:
                 del self._agents[car.unique_id]
+
+            # Update metrics
+            self.cars_reached_destination += 1
+            self.current_cars_in_simulation -= 1
 
         # Si consecutivamente no se pueden agregar coches, detener la simulación
         # (se asume congestión o saturación)

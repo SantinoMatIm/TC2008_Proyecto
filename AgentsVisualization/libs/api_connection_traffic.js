@@ -286,6 +286,24 @@ async function setSpawnInterval(interval) {
     }
 }
 
+/*
+ * Gets simulation metrics from the server
+ */
+async function getMetrics() {
+    try {
+        let response = await fetch(agent_server_uri + "getMetrics");
+
+        if (response.ok) {
+            let result = await response.json();
+            return result;
+        }
+
+    } catch (error) {
+        console.log(error);
+        return null;
+    }
+}
+
 export {
     cars,
     obstacles,
@@ -300,6 +318,7 @@ export {
     getDestinations,
     getRoads,
     setSpawnInterval,
+    getMetrics,
     initData,
     setOnNewCarsCallback
 };

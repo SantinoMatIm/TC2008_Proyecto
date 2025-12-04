@@ -20,7 +20,7 @@ import {
   cars, obstacles, trafficLights, destinations, roads,
   initTrafficModel, update, getCars, getObstacles,
   getTrafficLights, getDestinations, getRoads,
-  setSpawnInterval, initData, setOnNewCarsCallback
+  setSpawnInterval, getMetrics, initData, setOnNewCarsCallback
 } from '../libs/api_connection_traffic.js';
 
 // Importar el loader de materiales MTL
@@ -1535,6 +1535,15 @@ async function drawScene() {
   if (elapsed >= duration) {
     elapsed = 0;
     await update();
+
+    // Actualizar métricas
+    const metricsData = await getMetrics();
+    if (metricsData) {
+      metrics.totalCarsSpawned = metricsData.totalCarsSpawned;
+      metrics.carsReachedDestination = metricsData.carsReachedDestination;
+      metrics.currentCarsInSimulation = metricsData.currentCarsInSimulation;
+      metrics.currentStep = metricsData.currentStep;
+    }
   }
 
   requestAnimationFrame(drawScene);
@@ -1555,6 +1564,30 @@ function setupViewProjection(gl) {
   return M4.multiply(projectionMatrix, viewMatrix);
 }
 
+// Objeto para almacenar las métricas
+const metrics = {
+  totalCarsSpawned: 0,
+  carsReachedDestination: 0,
+  currentCarsInSimulation: 0,
+  currentStep: 0
+};
+
+// Crear la interfaz para controlar el sol
+function setupUI() {
+  const gui = new GUI();
+
+  // Métricas de la simulación
+  const metricsFolder = gui.addFolder('Simulation Metrics');
+  const metricsDisplay = metricsFolder.add(metrics, 'totalCarsSpawned').name('Total Spawned').listen().disable();
+  metricsFolder.add(metrics, 'carsReachedDestination').name('Reached Destination').listen().disable();
+  metricsFolder.add(metrics, 'currentCarsInSimulation').name('Current Cars').listen().disable();
+  metricsFolder.add(metrics, 'currentStep').name('Current Step').listen().disable();
+  metricsFolder.open();
+
+  // Control de spawn de carros
+  const spawnControls = {
+    spawnInterval: initData.SpawnInterval
+  };
 // Crea los controles de la interfaz con lil-gui
 function setupUI() {
   const gui = new GUI();
