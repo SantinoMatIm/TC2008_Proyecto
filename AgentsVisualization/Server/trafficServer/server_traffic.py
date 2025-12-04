@@ -212,6 +212,27 @@ def setSpawnInterval():
             return jsonify({"message": "Error setting spawn interval."}), 500
 
 
+# This route will be used to get simulation metrics
+@app.route('/getMetrics', methods=['GET'])
+@cross_origin()
+def getMetrics():
+    global cityModel
+    if request.method == 'GET':
+        try:
+            if cityModel:
+                return jsonify({
+                    'totalCarsSpawned': cityModel.total_cars_spawned,
+                    'carsReachedDestination': cityModel.cars_reached_destination,
+                    'currentCarsInSimulation': cityModel.current_cars_in_simulation,
+                    'currentStep': currentStep
+                })
+            else:
+                return jsonify({"message": "Model not initialized"}), 400
+        except Exception as e:
+            print(e)
+            return jsonify({"message": "Error getting metrics"}), 500
+
+
 if __name__ == '__main__':
     # Run the flask server in port 8585
     app.run(host="localhost", port=8585, debug=True)

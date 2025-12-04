@@ -3,6 +3,7 @@ from pathlib import Path
 
 from mesa.visualization import SolaraViz, make_space_component, Slider
 from mesa.visualization.components import AgentPortrayalStyle
+import solara
 
 # Asegurar que el directorio 'AgentsVisualization/Server/trafficServer' esté en sys.path
 # para que los imports 'trafficBase.*' funcionen igual que en server_traffic.py
@@ -48,6 +49,20 @@ def post_process(ax):
     ax.set_aspect("equal")
 
 
+@solara.component
+def MetricsDisplay(model):
+    """Component to display simulation metrics in real-time."""
+    # Create a card to display metrics
+    with solara.Card("Simulation Metrics", style={"margin": "10px", "padding": "15px"}):
+        solara.Markdown(f"""
+### Current Statistics:
+- **Total Cars Spawned:** {model.total_cars_spawned}
+- **Cars Reached Destination:** {model.cars_reached_destination}
+- **Current Cars in Simulation:** {model.current_cars_in_simulation}
+- **Current Step:** {model.steps}
+        """)
+
+
 # Los nombres de las claves deben coincidir EXACTAMENTE con los parámetros del constructor
 model_params = {
     "N": Slider("Initial number of cars", 5, 1, 40),
@@ -76,7 +91,7 @@ space_component = make_space_component(
 # pero el modelo verifica spawn_interval en cada step() y se actualiza automáticamente
 page = SolaraViz(
     model,
-    components=[space_component],
+    components=[space_component, MetricsDisplay],
     model_params=model_params,
     name="Traffic City (Cars Debug)",
 )
