@@ -76,8 +76,8 @@ async function getCars() {
                 // Create new cars and add them to the cars array
                 const initialCars = [];
                 for (const car of result.positions) {
-                    // Centrar en la celda escalada (3x3): posición * 3 + 1.5
-                    const newCar = new Object3D(car.id, [car.x * 3 + 1.5, car.y, car.z * 3 + 1.5]);
+                    // Centrar en la celda escalada (3x3): posición * 3 + 1.5, y=0 nivel del suelo
+                    const newCar = new Object3D(car.id, [car.x * 3 + 1.5, 0, car.z * 3 + 1.5]);
                     newCar['oldPosArray'] = newCar.posArray;
                     cars.push(newCar);
                     initialCars.push(newCar);
@@ -98,12 +98,12 @@ async function getCars() {
 
                     // Check if the car exists in the cars array
                     if(current_car != undefined){
-                        // Update the car's position (ESCALADO 3x + centrado)
+                        // Update the car's position (ESCALADO 3x + centrado), y=0 nivel del suelo
                         current_car.oldPosArray = current_car.posArray;
-                        current_car.position = {x: car.x * 3 + 1.5, y: car.y, z: car.z * 3 + 1.5};
+                        current_car.position = {x: car.x * 3 + 1.5, y: 0, z: car.z * 3 + 1.5};
                     } else {
                         // This is a new car that was spawned, add it to the array (ESCALADO 3x + centrado)
-                        const newCar = new Object3D(car.id, [car.x * 3 + 1.5, car.y, car.z * 3 + 1.5]);
+                        const newCar = new Object3D(car.id, [car.x * 3 + 1.5, 0, car.z * 3 + 1.5]);
                         newCar['oldPosArray'] = newCar.posArray;
                         cars.push(newCar);
                         newCars.push(newCar);

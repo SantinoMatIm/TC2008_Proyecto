@@ -402,58 +402,6 @@ illum 2
   // const streetlightData = await fetch('/assets/models/streetlight.obj').then(r => r.text());
   // streetlightObj.prepareVAO(gl, programInfo, streetlightData);
 
-  // DEBUG: Crear mapa 2D para verificar datos del servidor
-  const mapWidth = 36;
-  const mapHeight = 35;
-  const grid2D = [];
-
-  // Inicializar grid vacío
-  for (let z = 0; z < mapHeight; z++) {
-    grid2D[z] = [];
-    for (let x = 0; x < mapWidth; x++) {
-      grid2D[z][x] = '.';
-    }
-  }
-
-  // Marcar roads con 'R'
-  for (const road of roads) {
-    const x = Math.round(road.position.x);
-    const z = Math.round(road.position.z);
-    if (z >= 0 && z < mapHeight && x >= 0 && x < mapWidth) {
-      grid2D[z][x] = 'R';
-    }
-  }
-
-  // Marcar obstacles con '#' (sobreescribe si hay overlap)
-  for (const obstacle of obstacles) {
-    const x = Math.round(obstacle.position.x);
-    const z = Math.round(obstacle.position.z);
-    if (z >= 0 && z < mapHeight && x >= 0 && x < mapWidth) {
-      if (grid2D[z][x] === 'R') {
-        grid2D[z][x] = 'X'; // OVERLAP!
-      } else {
-        grid2D[z][x] = '#';
-      }
-    }
-  }
-
-  // Imprimir el mapa (invertido para que z=0 esté abajo como en el archivo)
-  console.log("=== MAPA RECONSTRUIDO DESDE DATOS DEL SERVIDOR ===");
-  console.log("R = road, # = obstacle, X = OVERLAP (ERROR!), . = vacío");
-  for (let z = mapHeight - 1; z >= 0; z--) {
-    console.log(`z=${z.toString().padStart(2)}: ${grid2D[z].join('')}`);
-  }
-
-  // Contar overlaps
-  let overlaps = 0;
-  for (let z = 0; z < mapHeight; z++) {
-    for (let x = 0; x < mapWidth; x++) {
-      if (grid2D[z][x] === 'X') overlaps++;
-    }
-  }
-  console.log(`Total overlaps: ${overlaps}`);
-  console.log(`Total roads: ${roads.length}, Total obstacles: ${obstacles.length}`);
-
   // Configurar las calles (ROJO para debug) - ESCALADO 3x
   for (const road of roads) {
     road.arrays = roadCube.arrays;
@@ -811,7 +759,7 @@ illum 2
 `;
     loadMtl(car2023Mtl);
     car.prepareVAO(gl, programInfo, car2023Data);
-    car.scale = { x: 1.5, y: 1.5, z: 1.5 };
+    car.scale = { x: 0.9, y: 0.9, z: 0.9 };  // Escala para igualar visualmente al car 2024
     car.yOffset = 0;
     car.isCar2024 = false;
   } else {
