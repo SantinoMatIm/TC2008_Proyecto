@@ -58,6 +58,7 @@ class Car(Agent):
         2. to_pos doesn't have an obstacle
         3. The road direction at to_pos allows us to continue (not opposite to our movement)
         4. (optional) to_pos doesn't have another car if avoid_cars=True
+        5. If to_pos has a Destination, it must be THIS car's destination
         """
         # Check bounds
         if not (0 <= to_pos[0] < self.model.grid.width and
@@ -67,6 +68,16 @@ class Car(Agent):
         # Check obstacle
         if self.has_obstacle(to_pos):
             return False
+
+        # Check if position has a Destination agent
+        # Only allow entry if it's THIS car's destination
+        cell_contents = self.model.grid.get_cell_list_contents([to_pos])
+        for agent in cell_contents:
+            if isinstance(agent, Destination):
+                # Only allow if this is our destination
+                if self.destination != to_pos:
+                    return False  # Not our destination, treat as blocked
+                # If it IS our destination, allow the move (continue checking other conditions)
 
         # Optionally check for other cars (when recalculating to avoid traffic)
         if avoid_cars and self.has_car(to_pos):
@@ -90,6 +101,10 @@ class Car(Agent):
             move_dir = "Up"
         elif dy == -1:
             move_dir = "Down"
+        # For diagonal movements
+        elif dx != 0 and dy != 0:
+            # Diagonal is valid, will check road direction separately
+            move_dir = "Diagonal"
 
         if move_dir is None:
             return False
@@ -97,10 +112,79 @@ class Car(Agent):
         # Can't enter a road if we'd be going against traffic
         # (our movement direction is opposite to the road direction)
         opposites = {"Up": "Down", "Down": "Up", "Left": "Right", "Right": "Left"}
-        if opposites.get(move_dir) == to_road_dir:
+        if move_dir != "Diagonal" and opposites.get(move_dir) == to_road_dir:
             return False
 
+        # CRITICAL: Check if making a turn (changing road direction)
+        # If turning, must be in the correct lane (side) for that turn
+        from_road_dir = self.get_road_direction(from_pos)
+        if from_road_dir and to_road_dir and from_road_dir != to_road_dir and move_dir != "Diagonal":
+            # This is a turn (road direction changes)
+            # Verify car is in correct lane for this turn
+            if not self._is_in_correct_lane_for_turn(from_pos, to_pos, from_road_dir, to_road_dir, move_dir):
+                return False  # Not in correct lane for this turn
+
         return True
+
+    def _is_in_correct_lane_for_turn(self, from_pos, to_pos, from_dir, to_dir, move_dir):
+        """
+        Checks if the car is in the correct lane to make a turn.
+        For example, to turn right, you should be in the right lane.
+        """
+        # Define which adjacent position should have traffic going same direction
+        # to confirm we're in the correct lane for the turn
+
+        # Map: (from_direction, to_direction) -> required adjacent check
+        # The idea: if turning, check if there's a parallel lane and if we're on the correct side
+
+        # For right turns (in direction of travel):
+        # Going Right -> Up: should be in upper lane (check if lane below has same direction)
+        # Going Right -> Down: should be in lower lane (check if lane above has same direction)
+        # Going Up -> Right: should be in right lane (check if lane left has same direction)
+        # Going Up -> Left: should be in left lane (check if lane right has same direction)
+        # Going Down -> Right: should be in right lane (check if lane left has same direction)
+        # Going Down -> Left: should be in left lane (check if lane right has same direction)
+        # Going Left -> Up: should be in upper lane (check if lane below has same direction)
+        # Going Left -> Down: should be in lower lane (check if lane above has same direction)
+
+        turn_lane_checks = {
+            ("Right", "Up"): (0, -1),     # Turning up from right: check lane below
+            ("Right", "Down"): (0, 1),    # Turning down from right: check lane above
+            ("Left", "Up"): (0, -1),      # Turning up from left: check lane below
+            ("Left", "Down"): (0, 1),     # Turning down from left: check lane above
+            ("Up", "Right"): (-1, 0),     # Turning right from up: check lane left
+            ("Up", "Left"): (1, 0),       # Turning left from up: check lane right
+            ("Down", "Right"): (-1, 0),   # Turning right from down: check lane left
+            ("Down", "Left"): (1, 0),     # Turning left from down: check lane right
+        }
+
+        check_offset = turn_lane_checks.get((from_dir, to_dir))
+        if not check_offset:
+            # Not a recognized turn pattern, allow it
+            return True
+
+        # Check if there's a parallel lane
+        parallel_pos = (from_pos[0] + check_offset[0], from_pos[1] + check_offset[1])
+
+        # Check bounds
+        if not (0 <= parallel_pos[0] < self.model.grid.width and
+                0 <= parallel_pos[1] < self.model.grid.height):
+            # No parallel lane (at edge), allow turn
+            return True
+
+        parallel_road_dir = self.get_road_direction(parallel_pos)
+
+        # Logic: If there's a parallel lane with same direction on the "check side",
+        # it means we're in the CORRECT lane for the turn.
+        # If NO parallel lane exists on check side, we're in the WRONG lane.
+        if parallel_road_dir == from_dir:
+            # There IS a parallel lane with same direction on the check side
+            # This means we're in the correct outer lane for this turn
+            return True
+
+        # No parallel lane with same direction on check side
+        # This means we're in the inner lane (wrong for this turn)
+        return False
     
     def get_neighbors(self, position, avoid_cars=False):
         """
@@ -122,6 +206,7 @@ class Car(Agent):
                 neighbors.append((next_pos, road_dir))
 
         # Diagonal movements (for lane changes while advancing forward only)
+        # ONLY allow diagonals on straight roads, NOT at intersections
         if current_road_dir:
             # Map road direction to allowed diagonal movements (forward + lateral)
             forward_diagonals = {
@@ -134,9 +219,30 @@ class Car(Agent):
             diagonal_directions = forward_diagonals.get(current_road_dir, [])
             for dx, dy in diagonal_directions:
                 next_pos = (position[0] + dx, position[1] + dy)
+
+                # Check bounds first before accessing grid
+                if not (0 <= next_pos[0] < self.model.grid.width and
+                        0 <= next_pos[1] < self.model.grid.height):
+                    continue  # Out of bounds, skip
+
+                # Get destination road direction
+                next_road_dir = self.get_road_direction(next_pos)
+
+                # CRITICAL: Only allow diagonal if destination has SAME road direction
+                # This prevents cutting corners at intersections
+                # Diagonal moves are ONLY for lane changes on straight roads
+                if next_road_dir != current_road_dir:
+                    continue  # Skip this diagonal, it's a turn/intersection
+
+                # CRITICAL: Cannot enter final destination diagonally
+                # Must be directly in front of destination to enter
+                if self.destination and next_pos == self.destination:
+                    continue  # Skip diagonal to destination, must enter straight
+
                 # Diagonal move is valid if:
                 # 1. The diagonal position itself is valid
-                # 2. At least one of the intermediate positions is valid (to ensure continuity)
+                # 2. The destination has the SAME road direction (same street, just different lane)
+                # 3. At least one of the intermediate positions is valid (to ensure continuity)
                 if self.is_valid_move(position, next_pos, avoid_cars=avoid_cars):
                     # Check if we can reach diagonal through intermediate steps
                     intermediate1 = (position[0] + dx, position[1])
@@ -145,8 +251,7 @@ class Car(Agent):
                     # At least one intermediate path should be valid
                     if (self.is_valid_move(position, intermediate1, avoid_cars=False) or
                         self.is_valid_move(position, intermediate2, avoid_cars=False)):
-                        road_dir = self.get_road_direction(next_pos)
-                        neighbors.append((next_pos, road_dir))
+                        neighbors.append((next_pos, next_road_dir))
 
         return neighbors
     
