@@ -1572,25 +1572,17 @@ const metrics = {
   currentStep: 0
 };
 
-// Crear la interfaz para controlar el sol
+// Crea los controles de la interfaz con lil-gui
 function setupUI() {
   const gui = new GUI();
 
   // Métricas de la simulación
   const metricsFolder = gui.addFolder('Simulation Metrics');
-  const metricsDisplay = metricsFolder.add(metrics, 'totalCarsSpawned').name('Total Spawned').listen().disable();
+  metricsFolder.add(metrics, 'totalCarsSpawned').name('Total Spawned').listen().disable();
   metricsFolder.add(metrics, 'carsReachedDestination').name('Reached Destination').listen().disable();
   metricsFolder.add(metrics, 'currentCarsInSimulation').name('Current Cars').listen().disable();
   metricsFolder.add(metrics, 'currentStep').name('Current Step').listen().disable();
   metricsFolder.open();
-
-  // Control de spawn de carros
-  const spawnControls = {
-    spawnInterval: initData.SpawnInterval
-  };
-// Crea los controles de la interfaz con lil-gui
-function setupUI() {
-  const gui = new GUI();
 
   // Cada cuántos pasos aparece un coche nuevo
   const spawnControls = { spawnInterval: initData.SpawnInterval };

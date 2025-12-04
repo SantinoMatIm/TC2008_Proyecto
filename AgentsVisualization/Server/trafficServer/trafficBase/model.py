@@ -13,18 +13,13 @@ class CityModel(Model):
     def __init__(self, N, spawn_interval=None, model_params=None, **kwargs):
         super().__init__()
         
-        # Si spawn_interval no se pasó como argumento, intentar obtenerlo de kwargs
-        # (SolaraViz puede pasar parámetros de diferentes maneras)
         if spawn_interval is None:
             spawn_interval = kwargs.get('spawn_interval', 10)
         
-        # Asegurar que spawn_interval sea un entero válido
         spawn_interval = max(1, int(spawn_interval))
         
-        # Guardar referencia a model_params para actualización dinámica (usado por Solara)
         self.model_params = model_params
 
-        # Load the map dictionary. The dictionary maps the characters in the map file to the corresponding agent.
         dataDictionary = json.load(open("city_files/mapDictionary.json"))
 
         self.traffic_lights = []
@@ -75,11 +70,10 @@ class CityModel(Model):
 
         self.num_agents = N
         self.steps = 0
-        # Intervalo de spawn configurable (usado por Solara y por la API REST)
         self.spawn_interval = 10  # Spawn cars every 10 steps
         self.next_car_id = 0
         self.cars_can_move = False  # Cars won't move until first spawn
-        self.consecutive_failed_spawns = 0  # Para detectar cuando ya no se pueden agregar coches
+        self.consecutive_failed_spawns = 0  # To detect when no more cars can be added
 
         # Simulation metrics
         self.total_cars_spawned = 0  # Total cars spawned during simulation
@@ -223,10 +217,8 @@ class CityModel(Model):
 
                 # Update metrics
                 self.total_cars_spawned += 1
-                self.current_cars_in_simulation += 1
 
                 # Initialize car's facing direction based on road direction
-                # (buscar de nuevo el contenido de la celda ya con el coche colocado)
                 new_cell_contents = self.grid.get_cell_list_contents([corner_pos])
                 for agent in new_cell_contents:
                     if isinstance(agent, Road):
@@ -246,9 +238,7 @@ class CityModel(Model):
         
         # Spawn cars at corners if it's time
         if self.steps % self.spawn_interval == 0:
-            # print(f"[MODEL-STEP] Step {self.steps}: Attempting to spawn cars (spawn_interval={self.spawn_interval})")
             spawned = self.spawn_cars_at_corners()
-            # print(f"[MODEL-STEP] Step {self.steps}: Spawned {spawned} cars")
 
             if spawned > 0:
                 self.consecutive_failed_spawns = 0
@@ -266,22 +256,26 @@ class CityModel(Model):
             else:
                 agent.step()
 
-        # Eliminar coches que llegaron a su destino
+        # Remove cars that reached their destination
         to_remove = [a for a in self.agents if isinstance(a, Car) and getattr(a, "to_be_removed", False)]
+        removed_count = 0
         for car in to_remove:
-            # print(f"[MODEL-CLEANUP] Removing {car.unique_id} from simulation")
-            # Remove from grid if still there
+            # Remove from grid
             if car.pos is not None:
                 self.grid.remove_agent(car)
-            # Remove from agent dict (Mesa uses dict, not list)
-            if car.unique_id in self._agents:
-                del self._agents[car.unique_id]
 
-            # Update metrics
-            self.cars_reached_destination += 1
-            self.current_cars_in_simulation -= 1
+            # Remove from model's agent list (Mesa internal structure)
+            if car in self._agents:
+                del self._agents[car]
+                removed_count += 1
 
-        # Si consecutivamente no se pueden agregar coches, detener la simulación
-        # (se asume congestión o saturación)
+                # Update metrics
+                self.cars_reached_destination += 1
+
+        # Calculate current cars dynamically for accuracy
+        self.current_cars_in_simulation = sum(1 for a in self.agents if isinstance(a, Car))
+
+        # If consecutively no cars can be added, stop the simulation
+        # (assume congestion or saturation)
         if self.consecutive_failed_spawns >= 5:
             self.running = False

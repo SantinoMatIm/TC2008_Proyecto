@@ -115,14 +115,10 @@ class Car(Agent):
         if move_dir != "Diagonal" and opposites.get(move_dir) == to_road_dir:
             return False
 
-        # CRITICAL: Check if making a turn (changing road direction)
-        # If turning, must be in the correct lane (side) for that turn
         from_road_dir = self.get_road_direction(from_pos)
         if from_road_dir and to_road_dir and from_road_dir != to_road_dir and move_dir != "Diagonal":
-            # This is a turn (road direction changes)
-            # Verify car is in correct lane for this turn
             if not self._is_in_correct_lane_for_turn(from_pos, to_pos, from_road_dir, to_road_dir, move_dir):
-                return False  # Not in correct lane for this turn
+                return False
 
         return True
 
@@ -312,11 +308,9 @@ class Car(Agent):
                 self.destination = dest
                 self.path_to_destination = None
                 self.path_calculation_failures = 0
-                # print(f"[NEW-DEST] {self.unique_id} assigned new reachable destination {self.destination}")
                 return
 
         # If no reachable destination found, mark car for removal (grid will be cleaned by model)
-        # print(f"[STUCK] {self.unique_id} cannot reach any destination, removing from simulation")
         self.to_be_removed = True
 
     def calculate_path(self):
@@ -329,15 +323,12 @@ class Car(Agent):
             if path and len(path) > 1:
                 self.path_to_destination = path[1:]  # Remove current position
                 self.path_calculation_failures = 0  # Reset failure counter
-                # print(f"[BFS] {self.unique_id} calculated path from {self.pos} to {self.destination}: {len(self.path_to_destination)} steps")
             else:
                 self.path_to_destination = None
                 self.path_calculation_failures += 1
-                # print(f"[BFS] {self.unique_id} NO PATH from {self.pos} to {self.destination} (failures: {self.path_calculation_failures})")
 
                 # If failed too many times, assign a new reachable destination
                 if self.path_calculation_failures >= 5:
-                    # print(f"[BFS] {self.unique_id} destination {self.destination} seems unreachable, assigning new destination")
                     self.assign_new_destination()
     
     def move(self):
@@ -356,17 +347,14 @@ class Car(Agent):
 
         # If stuck for too long, recalculate path avoiding current cars
         if self.wait_time >= 10:
-            # print(f"[STUCK-DETECT] {self.unique_id} has been waiting at {self.pos} for {self.wait_time} steps, recalculating path avoiding traffic")
             # Try to find alternative path avoiding current car positions
             if self.destination:
                 alternative_path = self.bfs_to_destination(self.pos, self.destination, avoid_cars=True)
                 if alternative_path and len(alternative_path) > 1:
                     self.path_to_destination = alternative_path[1:]
-                    # print(f"[REROUTE] {self.unique_id} found alternative path with {len(self.path_to_destination)} steps")
                 else:
                     # If no alternative path found, just clear current path and try again later
                     self.path_to_destination = None
-                    # print(f"[REROUTE] {self.unique_id} no alternative path found, will retry")
             self.wait_time = 0
 
         # Update facing direction
@@ -386,7 +374,6 @@ class Car(Agent):
                 # Assign completely random destination
                 self.destination = random.choice(destinations)
                 self.path_to_destination = None
-                # print(f"[INIT] {self.unique_id} assigned destination {self.destination}")
 
         # Check if at destination (mark for removal, grid will be cleaned by model)
         if self.destination and self.pos == self.destination:
@@ -403,13 +390,11 @@ class Car(Agent):
             
             # Check if next position is safe (no cars)
             if self.has_car(next_pos):
-                # print(f"[WAIT] {self.unique_id} waiting - car at {next_pos}")
                 return
 
             # Check traffic light
             traffic_light = self.get_traffic_light_state(next_pos)
             if traffic_light is False:
-                # print(f"[WAIT] {self.unique_id} waiting - red light at {next_pos}")
                 return
 
             # Move
@@ -422,16 +407,13 @@ class Car(Agent):
             if new_road_dir:
                 self.facing_direction = new_road_dir
 
-            # print(f"[MOVE] {self.unique_id} {old_pos} -> {self.pos} (remaining: {len(self.path_to_destination)}, dest: {self.destination})")
 
             # Check if arrived (mark for removal, grid will be cleaned by model)
             if self.pos == self.destination:
-                # print(f"[ARRIVED] {self.unique_id} reached destination {self.destination}")
                 self.to_be_removed = True
         else:
             # No path available - stay still and try to recalculate next step
             pass
-            # print(f"[NO-PATH] {self.unique_id} has no path to {self.destination}, staying still")
     
     def step(self):
         self.move()
