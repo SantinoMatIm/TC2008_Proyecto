@@ -39,16 +39,10 @@ async function initAgentsModel() {
             body: JSON.stringify(initData)
         });
 
-        // Check if the response was successful
         if (response.ok) {
-            // Parse the response as JSON and log the message
-            let result = await response.json();
-            console.log(result.message);
+            await response.json();
         }
-
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -99,8 +93,6 @@ async function getAgents() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -127,8 +119,6 @@ async function getObstacles() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -149,8 +139,6 @@ async function update() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 

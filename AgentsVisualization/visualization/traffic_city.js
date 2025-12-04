@@ -51,9 +51,9 @@ let elapsed = 0;
 let then = 0;
 
 // Variables de intensidad de luz
-let sunIntensity = 1.0;
-let trafficLightIntensity = 0.15;
-let streetLightIntensity = 0.5;
+let sunIntensity = 0.5;
+let trafficLightIntensity = 0.75;
+let streetLightIntensity = 1.25;
 
 // Array para guardar posiciones de postes de luz
 let streetLightPositions = [];
@@ -117,19 +117,19 @@ function setupScene() {
   // Crear la cámara apuntando al centro de la ciudad (ESCALADO 3x)
   // Mapa 36x35, escalado 3x = 108x105, centro en (54, 52.5)
   let camera = new Camera3D(0,
-    150,            // qué tan lejos está (escalado 3x)
+    100,            // distancia de la cámara
     4.7,            // rotación horizontal
-    1.2,            // rotación vertical (más arriba para ver todo)
+    1.0,            // rotación vertical
     [54, 0, 52.5],  // centro del mapa 36x35 escalado 3x
     [0, 0, 0]);
-  camera.panOffset = [0, 50, 0];
+  camera.panOffset = [0, 30, 0];
   scene.setCamera(camera);
   scene.camera.setupControls();
 
   // Crear la luna para iluminar la ciudad
   const sun = new Light3D(
     0,
-    [-30, 90, -30],                         // posición de la luna en una esquina (3x más lejos)
+    [-80, 120, -30],                        // posición de la luna (más arriba y a la izquierda)
     [0.35, 0.4, 0.5, 1.0],                  // luz ambiental (tono azulado frío)
     [0.9, 0.95, 1.0, 1.0],                  // luz directa (blanca como la luna)
     [1.0, 1.0, 1.0, 1.0]                    // brillos (blancos puros)
@@ -355,16 +355,17 @@ async function setupObjects(scene, gl, programInfo) {
   const treeData = await fetch('/assets/models/tree.obj').then(r => r.text());
   treeObj.prepareVAO(gl, programInfo, treeData);
 
-  // Poste de luz deshabilitado para mejorar rendimiento
-  // clearMaterials();
-  // const streetlightMtlData = await fetch('/assets/models/streetlight.mtl').then(r => r.text());
-  // loadMtl(streetlightMtlData);
-  // const streetlightObj = new Object3D(-210);
-  // const streetlightData = await fetch('/assets/models/streetlight.obj').then(r => r.text());
-  // streetlightObj.prepareVAO(gl, programInfo, streetlightData);
+  // Poste de luz
+  clearMaterials();
+  const streetlightMtlData = await fetch('/assets/models/streetlight.mtl').then(r => r.text());
+  loadMtl(streetlightMtlData);
+  const streetlightObj = new Object3D(-210);
+  const streetlightData = await fetch('/assets/models/streetlight.obj').then(r => r.text());
+  streetlightObj.prepareVAO(gl, programInfo, streetlightData);
 
   // Configurar las calles - ESCALADO 3x
   let lineIndex = 0;
+  let roadIndex = 0;
   for (const road of roads) {
     road.arrays = roadCube.arrays;
     road.bufferInfo = roadCube.bufferInfo;
@@ -382,6 +383,8 @@ async function setupObjects(scene, gl, programInfo) {
     road.position.x = scaledX;
     road.position.z = scaledZ;
     scene.addObject(road);
+
+    roadIndex++;
 
     // Agregar media línea blanca en el borde del carril
     // Cuando dos carriles opuestos están juntos, sus medias líneas forman la división
@@ -423,21 +426,221 @@ async function setupObjects(scene, gl, programInfo) {
     }
   }
 
-  // Poner cubos amarillos en CADA obstáculo - ESCALADO 3x
-  for (let i = 0; i < obstacles.length; i++) {
-    const obstacle = obstacles[i];
-
-    // Centrar en la celda escalada (3x + 1.5)
-    const scaledX = obstacle.position.x * 3 + 1.5;
-    const scaledZ = obstacle.position.z * 3 + 1.5;
-
-    const obstacleCube = new Object3D(`obstacle-${i}`, [scaledX, 1.5, scaledZ]);
-    obstacleCube.arrays = obstacleCubeTemplate.arrays;
-    obstacleCube.bufferInfo = obstacleCubeTemplate.bufferInfo;
-    obstacleCube.vao = obstacleCubeTemplate.vao;
-    obstacleCube.scale = { x: 1.5, y: 1.5, z: 1.5 };
-    scene.addObject(obstacleCube);
+  // Sistema de edificios: UN edificio por cada CLUSTER de obstáculos
+  // Paso 1: Crear set de posiciones de obstáculos
+  const obstacleSet = new Set();
+  for (const obs of obstacles) {
+    obstacleSet.add(`${obs.position.x},${obs.position.z}`);
   }
+
+  // Paso 2: Flood-fill para encontrar clusters de celdas adyacentes
+  const visited = new Set();
+  const clusters = [];
+
+  function floodFill(startX, startZ) {
+    const cluster = [];
+    const stack = [[startX, startZ]];
+    while (stack.length > 0) {
+      const [x, z] = stack.pop();
+      const key = `${x},${z}`;
+      if (visited.has(key) || !obstacleSet.has(key)) continue;
+      visited.add(key);
+      cluster.push({ x, z });
+      stack.push([x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]);
+    }
+    return cluster;
+  }
+
+  for (const obs of obstacles) {
+    const key = `${obs.position.x},${obs.position.z}`;
+    if (!visited.has(key)) {
+      const cluster = floodFill(obs.position.x, obs.position.z);
+      if (cluster.length > 0) clusters.push(cluster);
+    }
+  }
+
+  // Rascacielos (building1 y building2) - máximo 2 en total, los más altos
+  const skyscrapers = [
+    { obj: building1Obj, scaleMult: 0.3, isSkyscraper: true },
+    { obj: building2Obj, scaleMult: 0.3, isSkyscraper: true },
+  ];
+
+  // Edificios normales (los otros 4) - mismo ratio de aparición
+  const normalBuildings = [
+    { obj: building3Obj, heightMult: 0.8, scaleMult: 1.0 },
+    { obj: building4Obj, heightMult: 1.4, scaleMult: 1.0 },
+    { obj: building5Obj, heightMult: 1.6, scaleMult: 0.5 },  // office_tower más pequeño
+    { obj: building6Obj, heightMult: 1.0, scaleMult: 0.5 },  // warehouse/ladrillo más pequeño
+  ];
+
+  // Tamaño base de los modelos OBJ (entre 1.5 y 3 según pruebas)
+  const MODEL_BASE_SIZE = 2.0;
+
+  // Contador de rascacielos colocados (máximo 2)
+  let skyscrapersPlaced = 0;
+  const MAX_SKYSCRAPERS = 2;
+
+
+  // Asignación de edificios por cluster (0=árboles, 1-2=rascacielos, 3=casa, 4=depto, 5=oficina, 6=bodega)
+  const clusterToBuilding = {
+    0: 6,
+    1: 4,
+    2: 0,
+    5: 0,
+    26: 4,
+  };
+
+  const rotatedClusters = [5, 11];
+
+  // Todos los edificios disponibles
+  const allBuildings = {
+    1: { obj: building1Obj, scaleMult: 0.6, isSkyscraper: true },
+    2: { obj: building2Obj, scaleMult: 0.6, isSkyscraper: true },
+    3: { obj: building3Obj, heightMult: 0.8, scaleMult: 1.0 },
+    4: { obj: building4Obj, heightMult: 0.4, scaleMult: 1.0 },
+    5: { obj: building5Obj, heightMult: 1.6, scaleMult: 0.5 },
+    6: { obj: building6Obj, heightMult: 1.0, scaleMult: 0.5 },
+  };
+
+
+  // Paso 3: Colocar UN edificio por cada cluster
+  for (let i = 0; i < clusters.length; i++) {
+    const cluster = clusters[i];
+
+    // Calcular bounding box del cluster
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const cell of cluster) {
+      minX = Math.min(minX, cell.x);
+      maxX = Math.max(maxX, cell.x);
+      minZ = Math.min(minZ, cell.z);
+      maxZ = Math.max(maxZ, cell.z);
+    }
+
+    // Dimensiones del cluster en celdas
+    const widthCells = maxX - minX + 1;
+    const depthCells = maxZ - minZ + 1;
+
+    // Dimensiones EXACTAS en unidades del mundo (cada celda = 3 unidades)
+    const worldWidth = widthCells * 3;
+    const worldDepth = depthCells * 3;
+
+    // Centro del cluster en coordenadas del mundo
+    const centerX = (minX + maxX) / 2;
+    const centerZ = (minZ + maxZ) / 2;
+    const scaledCenterX = centerX * 3 + 1.5;
+    const scaledCenterZ = centerZ * 3 + 1.5;
+
+    // Asignar edificios a clusters ABAJO que serían casas
+    const isBottom = centerZ < 15;
+    const isNotThin = widthCells > 1 && depthCells > 1;
+    if (isBottom && isNotThin && clusterToBuilding[i] === undefined) {
+      // Solo UN rascacielos de cada tipo
+      if (!window.sky1Done && centerX < 12 && cluster.length > 4) {
+        clusterToBuilding[i] = 1;
+        window.sky1Done = true;
+      } else if (!window.sky2Done && centerX > 24 && cluster.length > 4) {
+        clusterToBuilding[i] = 2;
+        window.sky2Done = true;
+      } else if (centerZ < 7) {
+        clusterToBuilding[i] = 4;  // Apartment
+      } else if (centerZ < 12) {
+        clusterToBuilding[i] = 5;  // Office tower
+      } else {
+        clusterToBuilding[i] = 6;  // Warehouse
+      }
+    }
+
+    // Elegir edificio del mapeo manual, o default si no está definido
+    // Clusters delgados (1 celda de ancho o alto) automáticamente son árboles y postes
+    let buildingNum;
+    if (clusterToBuilding[i] !== undefined) {
+      buildingNum = clusterToBuilding[i];
+    } else if (widthCells === 1 || depthCells === 1) {
+      buildingNum = 0;  // árboles y postes para clusters delgados
+    } else {
+      buildingNum = 3;  // default: suburban_house
+    }
+
+
+    // Caso especial: 0 = árboles y postes de luz intercalados
+    if (buildingNum === 0) {
+      let itemIndex = 0;
+      const clusterSize = cluster.length;
+
+      for (const cell of cluster) {
+        const cellX = cell.x * 3 + 1.5;
+        const cellZ = cell.z * 3 + 1.5;
+
+        // Si el cluster tiene 1 sola celda, poner poste de luz
+        // Si no, poner poste cada 4 elementos (después de 3 árboles)
+        // También poner poste en el último elemento si no hay ninguno aún
+        const isLastItem = itemIndex === clusterSize - 1;
+        const noLightsYet = itemIndex < 3;
+        const forceLight = isLastItem && noLightsYet && clusterSize > 1;
+        if (clusterSize === 1 || itemIndex % 4 === 3 || forceLight) {
+          // Poste de luz
+          const post = new Object3D(`light-cluster${i}-${itemIndex}`, [cellX, 0, cellZ]);
+          post.arrays = streetlightObj.arrays;
+          post.bufferInfo = streetlightObj.bufferInfo;
+          post.vao = streetlightObj.vao;
+          post.scale = { x: 1.0, y: 1.0, z: 1.0 };
+
+          // Rotar si está en la lista de clusters rotados
+          // O si es un cluster delgado en la parte derecha del mapa (x > 20)
+          const shouldRotate = rotatedClusters.includes(i) || (cell.x > 20 && (widthCells === 1 || depthCells === 1));
+          if (shouldRotate) {
+            post.rotRad.y = Math.PI / 2;  // 90 grados
+          }
+
+          scene.addObject(post);
+
+          // Agregar posición para que emita luz
+          streetLightPositions.push({ x: cellX, y: 4, z: cellZ });
+        } else {
+          // Árbol
+          const tree = new Object3D(`tree-cluster${i}-${itemIndex}`, [cellX, 0, cellZ]);
+          tree.arrays = treeObj.arrays;
+          tree.bufferInfo = treeObj.bufferInfo;
+          tree.vao = treeObj.vao;
+          tree.scale = { x: 1.0, y: 1.0, z: 1.0 };
+          scene.addObject(tree);
+        }
+        itemIndex++;
+      }
+      continue;
+    }
+
+    const buildingType = allBuildings[buildingNum];
+
+    // Escalar X y Z INDEPENDIENTEMENTE, ajustado por scaleMult del modelo
+    const scaleX = (worldWidth / MODEL_BASE_SIZE) * buildingType.scaleMult;
+    const scaleZ = (worldDepth / MODEL_BASE_SIZE) * buildingType.scaleMult;
+
+    const building = new Object3D(`building-${i}`, [scaledCenterX, 0, scaledCenterZ]);
+    building.arrays = buildingType.obj.arrays;
+    building.bufferInfo = buildingType.obj.bufferInfo;
+    building.vao = buildingType.obj.vao;
+
+    // Altura: rascacielos siempre los más altos, edificios normales limitados
+    const SKYSCRAPER_HEIGHT = 8;
+    const MAX_NORMAL_HEIGHT = 4;
+
+    let buildingHeight;
+    if (buildingType.isSkyscraper) {
+      buildingHeight = SKYSCRAPER_HEIGHT;
+    } else {
+      const rawHeight = Math.min(scaleX, scaleZ) * (buildingType.heightMult || 1.0);
+      buildingHeight = Math.min(rawHeight, MAX_NORMAL_HEIGHT);
+    }
+
+    building.scale = {
+      x: scaleX,
+      y: buildingHeight,
+      z: scaleZ
+    };
+    scene.addObject(building);
+  }
+
 
   // Configurar los semáforos como cabinas flotantes orientadas según la calle
   const templates = window.trafficLightTemplates;
@@ -577,49 +780,56 @@ async function setupObjects(scene, gl, programInfo) {
   grassGround.scale = { x: 300, y: 0.1, z: 300 };
   scene.addObject(grassGround);
 
-  // Crear carretera infinita que se extiende hacia el horizonte
-  const highway = new Object3D('highway', [162, -0.08, 12]);
+  // Crear carretera infinita que se extiende desde el borde derecho de la ciudad
+  // Ciudad termina en x=108, carretera empieza ahí y va hasta el límite del mundo (300)
+  const highwayStartX = 110;
+  const highwayCenterZ = 52.5;  // Centro de la ciudad en Z
+  const highwayEndX = 295;      // Casi al límite del pasto (300)
+  const highwayLength = highwayEndX - highwayStartX;
+  const highway = new Object3D('highway', [highwayStartX + highwayLength/2, -0.08, highwayCenterZ]);
   highway.arrays = roadCube.arrays;
   highway.bufferInfo = roadCube.bufferInfo;
   highway.vao = roadCube.vao;
-  highway.scale = { x: 135, y: 0.05, z: 2 };
+  highway.scale = { x: highwayLength, y: 0.1, z: 6 };
   highway.shininess = 100.0;
   scene.addObject(highway);
 
-  // Crear líneas amarillas en el centro de la carretera (optimizado)
-  for (let i = 0; i < 54; i++) {
-    const line = new Object3D(`highway-line-${i}`, [26 + (i * 5), -0.04, 12]);
+  // Crear líneas amarillas en el centro de la carretera
+  const numLines = Math.floor(highwayLength / 6);
+  for (let i = 0; i < numLines; i++) {
+    const line = new Object3D(`highway-line-${i}`, [highwayStartX + 5 + (i * 6), -0.02, highwayCenterZ]);
     line.arrays = yellowLineCube.arrays;
     line.bufferInfo = yellowLineCube.bufferInfo;
     line.vao = yellowLineCube.vao;
-    line.scale = { x: 1.2, y: 0.05, z: 0.15 };
+    line.scale = { x: 2.5, y: 0.08, z: 0.25 };
     line.shininess = 80.0;
     scene.addObject(line);
   }
 
-  // Función para crear semicírculos (usado para el túnel de luz)
+  // Función para crear semicírculos centrados (usado para el túnel de luz)
   function createSemicircle(radius, segments, color) {
-    const positions = [0, 0, 0];
+    const positions = [];
     const normals = [];
     const colors = [];
     const indices = [];
 
+    // Centro del semicírculo
+    positions.push(0, 0, 0);
+    normals.push(-1, 0, 0);  // Normal del centro apunta hacia el espectador
+    colors.push(...color);
+
+    // Vértices del arco con normales que apuntan hacia afuera
     for (let i = 0; i <= segments; i++) {
       const angle = Math.PI * i / segments;
-      const x = 0;
       const y = radius * Math.sin(angle);
-      const z = radius * Math.cos(angle) - radius;
-      positions.push(x, y, z);
-    }
-
-    for (let i = 0; i <= segments + 1; i++) {
+      const z = radius * Math.cos(angle);
+      positions.push(0, y, z);
+      // Normal apunta hacia afuera (hacia -X, donde está el espectador)
       normals.push(-1, 0, 0);
-    }
-
-    for (let i = 0; i <= segments + 1; i++) {
       colors.push(...color);
     }
 
+    // Triángulos desde el centro hacia el arco
     for (let i = 0; i < segments; i++) {
       indices.push(0, i + 1, i + 2);
     }
@@ -632,22 +842,40 @@ async function setupObjects(scene, gl, programInfo) {
     };
   }
 
-  // Crear túnel de luz decorativo al final de la carretera (optimizado - 2 capas)
-  const lightTunnel = new Object3D('light-tunnel', [295, 0, 22]);
-  lightTunnel.arrays = createSemicircle(6, 24, [1.0, 1.0, 1.0, 1.0]);
-  lightTunnel.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnel.arrays);
-  lightTunnel.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnel.bufferInfo);
-  lightTunnel.shininess = 1000.0;
-  scene.addObject(lightTunnel);
+  // Crear túnel de luz decorativo al final de la carretera (4 capas)
+  // Carretera termina en x=295, túnel justo ahí, centrado en Z=52.5
+  const tunnelX = 295;
+  const tunnelZ = 52.5;  // Mismo centro Z que la carretera
 
-  const lightTunnelOuter = new Object3D('light-tunnel-outer', [295, 0, 22]);
-  lightTunnelOuter.arrays = createSemicircle(10, 24, [1.0, 0.9, 0.7, 0.6]);
-  lightTunnelOuter.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnelOuter.arrays);
-  lightTunnelOuter.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnelOuter.bufferInfo);
-  lightTunnelOuter.shininess = 1000.0;
-  scene.addObject(lightTunnelOuter);
+  const lightTunnel1 = new Object3D('light-tunnel', [tunnelX, 0, tunnelZ]);
+  lightTunnel1.arrays = createSemicircle(6, 32, [1.0, 1.0, 1.0, 1.0]);
+  lightTunnel1.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnel1.arrays);
+  lightTunnel1.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnel1.bufferInfo);
+  lightTunnel1.shininess = 1000.0;
+  scene.addObject(lightTunnel1);
 
-  // Crear 400 gotas de lluvia (optimizado para rendimiento)
+  const lightTunnel2 = new Object3D('light-tunnel-2', [tunnelX, 0, tunnelZ]);
+  lightTunnel2.arrays = createSemicircle(12, 32, [1.0, 1.0, 0.9, 0.9]);
+  lightTunnel2.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnel2.arrays);
+  lightTunnel2.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnel2.bufferInfo);
+  lightTunnel2.shininess = 1000.0;
+  scene.addObject(lightTunnel2);
+
+  const lightTunnel3 = new Object3D('light-tunnel-3', [tunnelX, 0, tunnelZ]);
+  lightTunnel3.arrays = createSemicircle(18, 32, [1.0, 0.95, 0.8, 0.7]);
+  lightTunnel3.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnel3.arrays);
+  lightTunnel3.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnel3.bufferInfo);
+  lightTunnel3.shininess = 1000.0;
+  scene.addObject(lightTunnel3);
+
+  const lightTunnel4 = new Object3D('light-tunnel-outer', [tunnelX, 0, tunnelZ]);
+  lightTunnel4.arrays = createSemicircle(25, 32, [1.0, 0.9, 0.7, 0.5]);
+  lightTunnel4.bufferInfo = twgl.createBufferInfoFromArrays(gl, lightTunnel4.arrays);
+  lightTunnel4.vao = twgl.createVAOFromBufferInfo(gl, programInfo, lightTunnel4.bufferInfo);
+  lightTunnel4.shininess = 1000.0;
+  scene.addObject(lightTunnel4);
+
+  // Crear 400 gotas de lluvia 
   for (let i = 0; i < 400; i++) {
     const drop = new Object3D(`rain-${i}`, [
       Math.random() * 600 - 300,
@@ -665,15 +893,16 @@ async function setupObjects(scene, gl, programInfo) {
   }
 
   // Crear rayo que aparecerá durante la lluvia
+  // Ciudad es 108x105 unidades
   lightning = new Object3D('lightning', [
-    Math.random() * 30,
-    30,
-    Math.random() * 30
+    Math.random() * 108,
+    40,
+    Math.random() * 105
   ]);
   lightning.arrays = lightningCube.arrays;
   lightning.bufferInfo = lightningCube.bufferInfo;
   lightning.vao = lightningCube.vao;
-  lightning.scale = { x: 0.3, y: 60, z: 0.3 };
+  lightning.scale = { x: 0.5, y: 80, z: 0.5 };
   lightning.visible = false;
   scene.addObject(lightning);
 
@@ -1081,7 +1310,18 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     }
   }
 
-  const totalLights = trafficLights.length;
+  // Agregar postes de luz - cada uno emite su propia luz
+  // LIMITE: el shader soporta 150 luces en total
+  const MAX_LIGHTS = 150;
+  const availableSlots = MAX_LIGHTS - trafficLights.length;
+
+  for (let i = 0; i < Math.min(streetLightPositions.length, availableSlots); i++) {
+    const streetLight = streetLightPositions[i];
+    allLightPositions.push(streetLight.x, streetLight.y, streetLight.z);
+    allLightColors.push(1.0, 0.9, 0.7, 1.0);  // luz cálida visible
+  }
+
+  const totalLights = Math.min(trafficLights.length + streetLightPositions.length, MAX_LIGHTS);
 
   // Mandar todos los datos de iluminación al shader
   let objectUniforms = {
@@ -1226,8 +1466,8 @@ async function drawScene() {
   // Sistema de rayos que aparecen cada cierto tiempo
   lightningTimer += deltaTime;
   if (lightning && lightningTimer >= nextLightningTime && lightningDuration <= 0) {
-    lightning.position.x = Math.random() * 30;
-    lightning.position.z = Math.random() * 30;
+    lightning.position.x = Math.random() * 108;
+    lightning.position.z = Math.random() * 105;
     lightning.visible = true;
     lightningDuration = 200;
     nextLightningTime = lightningTimer + lightningInterval;
@@ -1329,14 +1569,6 @@ function setupUI() {
   });
   spawnFolder.open();
 
-  // Posición de la luna
-  const sun = scene.lights[0];
-  const lightFolder = gui.addFolder('Moon Light');
-  lightFolder.add(sun.position, 'x', -50, 50).name('Position X');
-  lightFolder.add(sun.position, 'y', 0, 60).name('Position Y (Height)');
-  lightFolder.add(sun.position, 'z', -50, 50).name('Position Z');
-  lightFolder.open();
-
   // Qué tan fuerte brilla cada tipo de luz
   const intensityFolder = gui.addFolder('Light Intensity');
   intensityFolder.add({ sunIntensity }, 'sunIntensity', 0, 3).name('Moon Intensity').onChange((value) => {
@@ -1357,8 +1589,8 @@ function setupUI() {
   });
   const lightningControls = {
     triggerLightning: () => {
-      lightning.position.x = Math.random() * 30;
-      lightning.position.z = Math.random() * 30;
+      lightning.position.x = Math.random() * 108;
+      lightning.position.z = Math.random() * 105;
       lightning.visible = true;
       lightningDuration = 200;
     }

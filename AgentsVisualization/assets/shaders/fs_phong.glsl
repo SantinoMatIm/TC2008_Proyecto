@@ -16,8 +16,8 @@ uniform float u_sunIntensity;
 // Traffic light uniforms (includes streetlights)
 uniform int u_numTrafficLights;
 uniform int u_numTrafficLightsOnly;
-uniform vec3 u_trafficLightPositions[50];
-uniform vec4 u_trafficLightColors[50];
+uniform vec3 u_trafficLightPositions[150];
+uniform vec4 u_trafficLightColors[150];
 uniform float u_trafficLightIntensity;
 uniform float u_streetLightIntensity;
 

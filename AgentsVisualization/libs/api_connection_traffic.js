@@ -45,16 +45,10 @@ async function initTrafficModel() {
             body: JSON.stringify(initData)
         });
 
-        // Check if the response was successful
         if (response.ok) {
-            // Parse the response as JSON and log the message
-            let result = await response.json();
-            console.log(result.message);
+            await response.json();
         }
-
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -138,8 +132,6 @@ async function getCars() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -164,8 +156,6 @@ async function getObstacles() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -204,8 +194,6 @@ async function getTrafficLights() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -230,8 +218,6 @@ async function getDestinations() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -257,8 +243,6 @@ async function getRoads() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -278,8 +262,6 @@ async function update() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -297,13 +279,10 @@ async function setSpawnInterval(interval) {
 
         // Check if the response was successful
         if (response.ok) {
-            let result = await response.json();
-            console.log(result.message);
+            await response.json();
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
