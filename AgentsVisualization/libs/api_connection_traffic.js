@@ -88,10 +88,11 @@ async function getCars() {
                     onNewCarsCallback(initialCars);
                 }
             } else {
-                // Update the positions of existing cars and add new ones
-                const existingCarIds = new Set(cars.map(c => c.id));
+                // Get IDs from server response
+                const serverCarIds = new Set(result.positions.map(c => c.id));
                 const newCars = [];
 
+                // Update existing cars and add new ones
                 for (const car of result.positions) {
                     const current_car = cars.find((object3d) => object3d.id == car.id);
 
@@ -106,6 +107,20 @@ async function getCars() {
                         newCar['oldPosArray'] = newCar.posArray;
                         cars.push(newCar);
                         newCars.push(newCar);
+                    }
+                }
+
+                // Remove cars that are no longer in the server response (reached destination)
+                const carsToRemove = cars.filter(car => !serverCarIds.has(car.id));
+                for (const carToRemove of carsToRemove) {
+                    // Remove from cars array
+                    const index = cars.indexOf(carToRemove);
+                    if (index > -1) {
+                        cars.splice(index, 1);
+                    }
+                    // Remove from scene (if scene is available globally)
+                    if (window.scene) {
+                        window.scene.removeObject(carToRemove);
                     }
                 }
 

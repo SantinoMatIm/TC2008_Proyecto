@@ -35,6 +35,8 @@ import vsTextureGLSL from '../assets/shaders/vs_texture.glsl?raw';
 import fsTextureGLSL from '../assets/shaders/fs_texture.glsl?raw';
 
 const scene = new Scene3D();
+// Hacer la escena accesible globalmente para poder eliminar coches
+window.scene = scene;
 
 // Mapa rápido para saber la dirección de la calle en cada celda (x, z)
 const roadDirectionMap = new Map();
@@ -112,14 +114,15 @@ async function main() {
 
 
 function setupScene() {
-  // Crear la cámara apuntando al centro de la ciudad
+  // Crear la cámara apuntando al centro de la ciudad (ESCALADO 3x)
+  // Mapa 36x35, escalado 3x = 108x105, centro en (54, 52.5)
   let camera = new Camera3D(0,
-    105,            // qué tan lejos está (3x más)
+    150,            // qué tan lejos está (escalado 3x)
     4.7,            // rotación horizontal
-    0.8,            // rotación vertical
-    [36, 0, 36],    // está mirando al centro de la ciudad (3x)
+    1.2,            // rotación vertical (más arriba para ver todo)
+    [54, 0, 52.5],  // centro del mapa 36x35 escalado 3x
     [0, 0, 0]);
-  camera.panOffset = [0, 36, 0];
+  camera.panOffset = [0, 50, 0];
   scene.setCamera(camera);
   scene.camera.setupControls();
 
@@ -134,79 +137,7 @@ function setupScene() {
   scene.addLight(sun);
 }
 
-// Función para agrupar edificios que están pegados y hacerlos un solo edificio grande
-function groupAdjacentObstacles(obstacles) {
-  if (obstacles.length === 0) return [];
-
-  // Mapa para buscar rápido si hay un edificio en una posición
-  const obstacleMap = new Map();
-  for (const obs of obstacles) {
-    const key = `${Math.round(obs.position.x)},${Math.round(obs.position.z)}`;
-    obstacleMap.set(key, obs);
-  }
-
-  const visited = new Set();
-  const clusters = [];
-
-  // Función para obtener los vecinos de una celda (arriba, abajo, izquierda, derecha)
-  function getNeighbors(x, z) {
-    return [
-      [x + 1, z],
-      [x - 1, z],
-      [x, z + 1],
-      [x, z - 1]
-    ];
-  }
-
-  // Buscar todos los edificios conectados empezando desde uno
-  function findCluster(startX, startZ) {
-    const queue = [[startX, startZ]];
-    const clusterCells = [];
-    let minX = startX, maxX = startX;
-    let minZ = startZ, maxZ = startZ;
-
-    while (queue.length > 0) {
-      const [x, z] = queue.shift();
-      const key = `${x},${z}`;
-
-      if (visited.has(key)) continue;
-      if (!obstacleMap.has(key)) continue;
-
-      visited.add(key);
-      clusterCells.push([x, z]);
-
-      // Actualizar los límites del grupo
-      minX = Math.min(minX, x);
-      maxX = Math.max(maxX, x);
-      minZ = Math.min(minZ, z);
-      maxZ = Math.max(maxZ, z);
-
-      // Agregar los vecinos a la cola para seguir buscando
-      for (const [nx, nz] of getNeighbors(x, z)) {
-        const nKey = `${nx},${nz}`;
-        if (!visited.has(nKey) && obstacleMap.has(nKey)) {
-          queue.push([nx, nz]);
-        }
-      }
-    }
-
-    return { minX, maxX, minZ, maxZ, cells: clusterCells };
-  }
-
-  // Encontrar todos los grupos de edificios
-  for (const obs of obstacles) {
-    const x = Math.round(obs.position.x);
-    const z = Math.round(obs.position.z);
-    const key = `${x},${z}`;
-
-    if (!visited.has(key)) {
-      const cluster = findCluster(x, z);
-      clusters.push(cluster);
-    }
-  }
-
-  return clusters;
-}
+// Ahora cada obstáculo tiene su propio edificio individual
 
 // Función para agregar nuevos carros a la escena (definida antes de setupObjects)
 async function addNewCarsToScene(newCars) {
@@ -222,8 +153,8 @@ async function addNewCarsToScene(newCars) {
 async function setupObjects(scene, gl, programInfo) {
   // Crear cubos con diferentes colores para calles, destinos y sol
   const roadCube = new Object3D(-100);
-  // Color más oscuro para asfalto húmedo que refleja mejor las luces
-  roadCube.arrays = cubeSingleColor(1, [0.2, 0.2, 0.22, 1]);
+  // DEBUG: ROJO para visualizar las carreteras
+  roadCube.arrays = cubeSingleColor(1, [1.0, 0.0, 0.0, 1.0]);
   roadCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, roadCube.arrays);
   roadCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, roadCube.bufferInfo);
 
@@ -471,144 +402,94 @@ illum 2
   // const streetlightData = await fetch('/assets/models/streetlight.obj').then(r => r.text());
   // streetlightObj.prepareVAO(gl, programInfo, streetlightData);
 
-  // Configurar las calles
+  // DEBUG: Crear mapa 2D para verificar datos del servidor
+  const mapWidth = 36;
+  const mapHeight = 35;
+  const grid2D = [];
+
+  // Inicializar grid vacío
+  for (let z = 0; z < mapHeight; z++) {
+    grid2D[z] = [];
+    for (let x = 0; x < mapWidth; x++) {
+      grid2D[z][x] = '.';
+    }
+  }
+
+  // Marcar roads con 'R'
+  for (const road of roads) {
+    const x = Math.round(road.position.x);
+    const z = Math.round(road.position.z);
+    if (z >= 0 && z < mapHeight && x >= 0 && x < mapWidth) {
+      grid2D[z][x] = 'R';
+    }
+  }
+
+  // Marcar obstacles con '#' (sobreescribe si hay overlap)
+  for (const obstacle of obstacles) {
+    const x = Math.round(obstacle.position.x);
+    const z = Math.round(obstacle.position.z);
+    if (z >= 0 && z < mapHeight && x >= 0 && x < mapWidth) {
+      if (grid2D[z][x] === 'R') {
+        grid2D[z][x] = 'X'; // OVERLAP!
+      } else {
+        grid2D[z][x] = '#';
+      }
+    }
+  }
+
+  // Imprimir el mapa (invertido para que z=0 esté abajo como en el archivo)
+  console.log("=== MAPA RECONSTRUIDO DESDE DATOS DEL SERVIDOR ===");
+  console.log("R = road, # = obstacle, X = OVERLAP (ERROR!), . = vacío");
+  for (let z = mapHeight - 1; z >= 0; z--) {
+    console.log(`z=${z.toString().padStart(2)}: ${grid2D[z].join('')}`);
+  }
+
+  // Contar overlaps
+  let overlaps = 0;
+  for (let z = 0; z < mapHeight; z++) {
+    for (let x = 0; x < mapWidth; x++) {
+      if (grid2D[z][x] === 'X') overlaps++;
+    }
+  }
+  console.log(`Total overlaps: ${overlaps}`);
+  console.log(`Total roads: ${roads.length}, Total obstacles: ${obstacles.length}`);
+
+  // Configurar las calles (ROJO para debug) - ESCALADO 3x
   for (const road of roads) {
     road.arrays = roadCube.arrays;
     road.bufferInfo = roadCube.bufferInfo;
     road.vao = roadCube.vao;
-    road.scale = { x: 3, y: 0.15, z: 3 };
-    road.color = [0.3, 0.3, 0.3, 1];
+    // Cubo base es 2x2, scale 1.5 = tamaño 3x3 para llenar celda escalada
+    road.scale = { x: 1.5, y: 0.15, z: 1.5 };
+    road.color = [1.0, 0.0, 0.0, 1.0];
 
-    // Escalar posición del mapa y centrar en la celda (3x3)
+    // Guardar dirección ANTES de escalar para el mapa de direcciones
+    const key = `${Math.round(road.position.x * 3 + 1.5)},${Math.round(road.position.z * 3 + 1.5)}`;
+    roadDirectionMap.set(key, road.direction);
+
+    // Centrar en la celda escalada (3x + 1.5)
     road.position.x = road.position.x * 3 + 1.5;
     road.position.z = road.position.z * 3 + 1.5;
-
-    // Guardar la dirección de la calle en el mapa DESPUÉS de escalar (clave: "x,z")
-    const key = `${Math.round(road.position.x)},${Math.round(road.position.z)}`;
-    roadDirectionMap.set(key, road.direction);
 
     scene.addObject(road);
   }
 
-  // DEBUG: Primero poner cubos amarillos en TODOS los obstacles
-  for (const obstacle of obstacles) {
-    // Centrar en la celda escalada (3x3): posición * 3 + 1.5
-    const debugMarker = new Object3D(`debug-obstacle-${obstacle.id}`, [obstacle.position.x * 3 + 1.5, 0.5, obstacle.position.z * 3 + 1.5]);
-    debugMarker.arrays = debugObstacleCube.arrays;
-    debugMarker.bufferInfo = debugObstacleCube.bufferInfo;
-    debugMarker.vao = debugObstacleCube.vao;
-    debugMarker.scale = { x: 3.0, y: 1, z: 3.0 };
-    scene.addObject(debugMarker);
-  }
+  // Poner cubos amarillos en CADA obstáculo - ESCALADO 3x
+  for (let i = 0; i < obstacles.length; i++) {
+    const obstacle = obstacles[i];
 
-  // Agrupar edificios que estén pegados
-  const buildingClusters = groupAdjacentObstacles(obstacles);
+    // Centrar en la celda escalada (3x + 1.5)
+    const scaledX = obstacle.position.x * 3 + 1.5;
+    const scaledZ = obstacle.position.z * 3 + 1.5;
 
-  // Filtrar clusters grandes (sizeX >= 2 Y sizeZ >= 2) para Building 1 y Building 2
-  const largeClusters = [];
-  for (let i = 0; i < buildingClusters.length; i++) {
-    const cluster = buildingClusters[i];
-    const sizeX = cluster.maxX - cluster.minX + 1;
-    const sizeZ = cluster.maxZ - cluster.minZ + 1;
-    // Ambas dimensiones deben ser >= 2 para evitar edificios muy delgados (como 4x1)
-    if (sizeX >= 2 && sizeZ >= 2) {
-      largeClusters.push(i);
-    }
-  }
+    const debugCube = new Object3D(`obstacle-${i}`, [scaledX, 1.5, scaledZ]);
+    debugCube.arrays = debugObstacleCube.arrays;
+    debugCube.bufferInfo = debugObstacleCube.bufferInfo;
+    debugCube.vao = debugObstacleCube.vao;
+    // Cubo base es 2x2, scale 1.5 = tamaño 3x3 para llenar celda escalada
+    debugCube.scale = { x: 1.5, y: 1.5, z: 1.5 };
 
-  // Seleccionar índices aleatorios para Building 1 y Building 2 (solo en clusters grandes)
-  let building1Index = -1;
-  let building2Index = -1;
-
-  if (largeClusters.length >= 1) {
-    const randomIndex1 = Math.floor(Math.random() * largeClusters.length);
-    building1Index = largeClusters[randomIndex1];
-
-    if (largeClusters.length >= 2) {
-      let randomIndex2;
-      do {
-        randomIndex2 = Math.floor(Math.random() * largeClusters.length);
-      } while (randomIndex2 === randomIndex1);
-      building2Index = largeClusters[randomIndex2];
-    }
-  }
-
-  // Crear los edificios agrupados con diferentes modelos
-  let buildingIdCounter = 0;
-  for (let i = 0; i < buildingClusters.length; i++) {
-    const cluster = buildingClusters[i];
-    // Calcular el centro y tamaño del grupo de edificios (centrado en celdas 3x3)
-    const centerX = (cluster.minX + cluster.maxX) / 2 * 3 + 1.5;
-    const centerZ = (cluster.minZ + cluster.maxZ) / 2 * 3 + 1.5;
-    const sizeX = cluster.maxX - cluster.minX + 1;
-    const sizeZ = cluster.maxZ - cluster.minZ + 1;
-    const area = sizeX * sizeZ;
-
-    // Espacios delgados = banquetas, espacios normales = edificios
-    const isNarrowSpace = (sizeX === 1) || (sizeZ === 1);
-
-    if (isNarrowSpace) {
-      // Espacios estrechos vacíos - sin banquetas ni postes
-    } else {
-      // Crear edificio
-      const building = new Object3D(`building-${buildingIdCounter++}`, [centerX, 0, centerZ]);
-      let buildingType;
-
-      if (i === building1Index) {
-        buildingType = 0; // Building 1
-      } else if (i === building2Index) {
-        buildingType = 1; // Building 2
-      } else {
-        // El resto: Suburban house (2), Apartment (3), Office tower (4), o Warehouse (5)
-        buildingType = 2 + Math.floor(Math.random() * 4);
-      }
-
-      if (buildingType === 0) {
-        // Building 1 - gris con ventanas blancas
-        building.arrays = building1Obj.arrays;
-        building.bufferInfo = building1Obj.bufferInfo;
-        building.vao = building1Obj.vao;
-        building.scale = { x: 1.05 * sizeX, y: 3.6, z: 1.05 * sizeZ };
-        building.position.y = 0;
-      } else if (buildingType === 1) {
-        // Building 2 - gris con ventanas azules
-        building.arrays = building2Obj.arrays;
-        building.bufferInfo = building2Obj.bufferInfo;
-        building.vao = building2Obj.vao;
-        building.scale = { x: 1.05 * sizeX, y: 6.0, z: 1.05 * sizeZ };
-        building.position.y = 0;
-      } else if (buildingType === 2) {
-        // Suburban house - casa de suburbios
-        building.arrays = building3Obj.arrays;
-        building.bufferInfo = building3Obj.bufferInfo;
-        building.vao = building3Obj.vao;
-        building.scale = { x: 1.35 * sizeX, y: 2.4, z: 1.35 * sizeZ };
-        building.position.y = 0;
-      } else if (buildingType === 3) {
-        // Apartment building - edificio de departamentos
-        building.arrays = building4Obj.arrays;
-        building.bufferInfo = building4Obj.bufferInfo;
-        building.vao = building4Obj.vao;
-        building.scale = { x: 0.75 * sizeX, y: 1.8, z: 0.75 * sizeZ };
-        building.position.y = 0;
-      } else if (buildingType === 4) {
-        // Office tower - torre de oficinas escalonada
-        building.arrays = building5Obj.arrays;
-        building.bufferInfo = building5Obj.bufferInfo;
-        building.vao = building5Obj.vao;
-        building.scale = { x: 0.9 * sizeX, y: 2.1, z: 0.9 * sizeZ };
-        building.position.y = 0;
-      } else {
-        // Warehouse - almacén industrial
-        building.arrays = building6Obj.arrays;
-        building.bufferInfo = building6Obj.bufferInfo;
-        building.vao = building6Obj.vao;
-        building.scale = { x: 1.05 * sizeX, y: 2.7, z: 1.05 * sizeZ };
-        building.position.y = 0;
-      }
-
-      scene.addObject(building);
-    }
+    scene.addObject(debugCube);
   }
 
   // Configurar los semáforos
