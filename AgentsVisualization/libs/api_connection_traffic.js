@@ -74,33 +74,41 @@ async function getCars() {
             // Check if the cars array is empty
             if (cars.length == 0) {
                 // Create new cars and add them to the cars array
+                const initialCars = [];
                 for (const car of result.positions) {
-                    const newCar = new Object3D(car.id, [car.x, car.y, car.z]);
+                    // Centrar en la celda escalada (3x3): posición * 3 + 1.5
+                    const newCar = new Object3D(car.id, [car.x * 3 + 1.5, car.y, car.z * 3 + 1.5]);
                     newCar['oldPosArray'] = newCar.posArray;
                     cars.push(newCar);
+                    initialCars.push(newCar);
+                }
+
+                // Notify about initial cars if callback is set
+                if (initialCars.length > 0 && onNewCarsCallback) {
+                    onNewCarsCallback(initialCars);
                 }
             } else {
                 // Update the positions of existing cars and add new ones
                 const existingCarIds = new Set(cars.map(c => c.id));
                 const newCars = [];
-                
+
                 for (const car of result.positions) {
                     const current_car = cars.find((object3d) => object3d.id == car.id);
 
                     // Check if the car exists in the cars array
                     if(current_car != undefined){
-                        // Update the car's position
+                        // Update the car's position (ESCALADO 3x + centrado)
                         current_car.oldPosArray = current_car.posArray;
-                        current_car.position = {x: car.x, y: car.y, z: car.z};
+                        current_car.position = {x: car.x * 3 + 1.5, y: car.y, z: car.z * 3 + 1.5};
                     } else {
-                        // This is a new car that was spawned, add it to the array
-                        const newCar = new Object3D(car.id, [car.x, car.y, car.z]);
+                        // This is a new car that was spawned, add it to the array (ESCALADO 3x + centrado)
+                        const newCar = new Object3D(car.id, [car.x * 3 + 1.5, car.y, car.z * 3 + 1.5]);
                         newCar['oldPosArray'] = newCar.posArray;
                         cars.push(newCar);
                         newCars.push(newCar);
                     }
                 }
-                
+
                 // Notify about new cars if callback is set
                 if (newCars.length > 0 && onNewCarsCallback) {
                     onNewCarsCallback(newCars);
