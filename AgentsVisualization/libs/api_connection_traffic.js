@@ -121,6 +121,12 @@ async function getCars() {
                     // Remove from scene (if scene is available globally)
                     if (window.scene) {
                         window.scene.removeObject(carToRemove);
+                        // También eliminar las ruedas del coche
+                        if (carToRemove.wheels) {
+                            for (const wheel of carToRemove.wheels) {
+                                window.scene.removeObject(wheel);
+                            }
+                        }
                     }
                 }
 

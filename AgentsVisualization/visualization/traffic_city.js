@@ -13,7 +13,7 @@ import { Scene3D } from '../libs/scene3d';
 import { Object3D } from '../libs/object3d';
 import { Camera3D } from '../libs/camera3d';
 import { Light3D } from '../libs/light3d';
-import { cubeSingleColor, cubeTextured } from '../libs/shapes';
+import { cubeSingleColor, cubeTextured, cylinder } from '../libs/shapes';
 
 // Traemos las funciones y arrays para hablar con el servidor
 import {
@@ -174,6 +174,14 @@ async function setupObjects(scene, gl, programInfo) {
   debugObstacleCube.arrays = cubeSingleColor(1, [1.0, 1.0, 0.0, 1.0]); // Amarillo brillante
   debugObstacleCube.bufferInfo = twgl.createBufferInfoFromArrays(gl, debugObstacleCube.arrays);
   debugObstacleCube.vao = twgl.createVAOFromBufferInfo(gl, programInfo, debugObstacleCube.bufferInfo);
+
+  // Cilindro para ruedas - negro, más segmentos para verse mejor
+  const wheelCylinder = new Object3D(-116);
+  wheelCylinder.arrays = cylinder(24, [0.15, 0.15, 0.15, 1.0]); // Gris oscuro/negro
+  wheelCylinder.bufferInfo = twgl.createBufferInfoFromArrays(gl, wheelCylinder.arrays);
+  wheelCylinder.vao = twgl.createVAOFromBufferInfo(gl, programInfo, wheelCylinder.bufferInfo);
+  // Guardar globalmente para usar en setupCar
+  window.wheelTemplate = wheelCylinder;
 
   // Césped húmedo - verde oscuro
   const grassCube = new Object3D(-104);
@@ -760,7 +768,7 @@ illum 2
     loadMtl(car2023Mtl);
     car.prepareVAO(gl, programInfo, car2023Data);
     car.scale = { x: 0.9, y: 0.9, z: 0.9 };  // Escala para igualar visualmente al car 2024
-    car.yOffset = 0;
+    car.yOffset = 0.1;
     car.isCar2024 = false;
   } else {
     // Car 2024 tiene materiales separados: cuerpo random, ventanas azul claro
@@ -807,7 +815,7 @@ illum 2
     loadMtl(car2024Mtl);
     car.prepareVAO(gl, programInfo, car2024Data);
     car.scale = { x: 0.48, y: 0.48, z: 0.48 };
-    car.yOffset = 0;
+    car.yOffset = 0.1;
     car.isCar2024 = true;
   }
 
@@ -815,6 +823,60 @@ illum 2
     car.rotRad.y = 0;
     car.color = [1.0, 0.8, 0.0, 1.0];
     scene.addObject(car);
+
+    // Crear 4 ruedas para el coche
+    const wheelTemplate = window.wheelTemplate;
+    if (wheelTemplate) {
+      car.wheels = [];
+      car.wheelRotation = 0; // Rotación de las ruedas (animación)
+
+      // Posiciones relativas de las ruedas según el modelo (escaladas del debug)
+      // Ruedas a nivel del suelo (y=0), coche elevado con yOffset
+      let wheelPositions;
+      let wheelScale;
+      let wheelRotAxis; // 'x' o 'z' para orientar el cilindro horizontal
+
+      if (car.isCar2024) {
+        // Car 2024 - NO TOCAR
+        wheelPositions = [
+          { x: 1.6, y: 0.2, z: 0.7 },
+          { x: -1.6, y: 0.2, z: 0.7 },
+          { x: 1.6, y: 0.2, z: -0.7 },
+          { x: -1.6, y: 0.2, z: -0.7 }
+        ];
+        wheelScale = { x: 0.3, y: 0.25, z: 0.33 };
+        wheelRotAxis = 'x';
+      } else {
+        // Car 2023
+        wheelPositions = [
+          { x: 1.0, y: 0.2, z: 0.8 },
+          { x: -1.0, y: 0.2, z: 0.8 },
+          { x: 1.0, y: 0.2, z: -0.8 },
+          { x: -1.0, y: 0.2, z: -0.8 }
+        ];
+        wheelScale = { x: 0.3, y: 0.25, z: 0.33 };
+        wheelRotAxis = 'z';
+      }
+
+      for (let i = 0; i < 4; i++) {
+        const wheel = new Object3D(`wheel-${car.id}-${i}`, [0, 0, 0]);
+        wheel.arrays = wheelTemplate.arrays;
+        wheel.bufferInfo = wheelTemplate.bufferInfo;
+        wheel.vao = wheelTemplate.vao;
+        wheel.scale = wheelScale;
+        wheel.relativePos = wheelPositions[i]; // Posición relativa al coche
+        wheel.wheelRotAxis = wheelRotAxis; // Guardar eje de rotación
+        // Orientar cilindro horizontal
+        if (wheelRotAxis === 'x') {
+          wheel.rotRad.x = Math.PI / 2;
+        } else {
+          wheel.rotRad.z = Math.PI / 2;
+        }
+        wheel.isWheel = true;
+        car.wheels.push(wheel);
+        scene.addObject(wheel);
+      }
+    }
   }
 
 
@@ -822,6 +884,9 @@ illum 2
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
   // No dibujar gotas de lluvia si no están visibles
   if (object.visible === false) return;
+
+  // Las ruedas se dibujan junto con su coche, no por separado
+  if (object.isWheel) return;
 
   // Actualizar modelo del semáforo según su estado
   if (trafficLights.includes(object)) {
@@ -1004,6 +1069,93 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 
   gl.bindVertexArray(object.vao);
   twgl.drawBufferInfo(gl, object.bufferInfo);
+
+  // Si es un coche con ruedas, dibujarlas
+  if (cars.includes(object) && object.wheels) {
+    // Animar rotación de ruedas basado en movimiento
+    if (object.oldPosArray) {
+      const dx = object.posArray[0] - object.oldPosArray[0];
+      const dz = object.posArray[2] - object.oldPosArray[2];
+      const distance = Math.sqrt(dx * dx + dz * dz);
+      // Rotar ruedas proporcional a la distancia recorrida
+      object.wheelRotation += distance * 0.5 * fract;
+    }
+
+    // Dibujar cada rueda
+    for (const wheel of object.wheels) {
+      // Calcular posición de la rueda en coordenadas del mundo
+      const cosY = Math.cos(object.rotRad.y);
+      const sinY = Math.sin(object.rotRad.y);
+      const relX = wheel.relativePos.x;
+      const relZ = wheel.relativePos.z;
+
+      // Rotar la posición relativa según la orientación del coche
+      const rotatedX = relX * cosY - relZ * sinY;
+      const rotatedZ = relX * sinY + relZ * cosY;
+
+      // Posición final de la rueda
+      const wheelPos = [
+        v3_tra[0] + rotatedX,
+        v3_tra[1] + wheel.relativePos.y,
+        v3_tra[2] + rotatedZ
+      ];
+
+      // Crear transformaciones para la rueda
+      // Orden: Scale -> Orientar cilindro -> Animar giro -> Seguir coche -> Trasladar
+      const wheelScaMat = M4.scale(wheel.scaArray);
+      const wheelTraMat = M4.translation(wheelPos);
+      const wheelRotYMat = M4.rotationY(object.rotRad.y); // Seguir dirección del coche
+
+      let wheelTransforms = M4.identity();
+      wheelTransforms = M4.multiply(wheelScaMat, wheelTransforms);
+
+      if (wheel.wheelRotAxis === 'x') {
+        // Car 2024 - NO TOCAR
+        const wheelAnimMat = M4.rotationY(object.wheelRotation);
+        const wheelOrientMat = M4.rotationX(Math.PI / 2);
+        wheelTransforms = M4.multiply(wheelAnimMat, wheelTransforms);
+        wheelTransforms = M4.multiply(wheelOrientMat, wheelTransforms);
+      } else {
+        // Car 2023 - misma rueda, misma animación Y, solo diferente orientación Z
+        const wheelAnimMat = M4.rotationY(object.wheelRotation);
+        const wheelOrientMat = M4.rotationZ(Math.PI / 2);
+        wheelTransforms = M4.multiply(wheelAnimMat, wheelTransforms);
+        wheelTransforms = M4.multiply(wheelOrientMat, wheelTransforms);
+      }
+
+      wheelTransforms = M4.multiply(wheelRotYMat, wheelTransforms);
+      wheelTransforms = M4.multiply(wheelTraMat, wheelTransforms);
+
+      const wheelWorldMatrix = wheelTransforms;
+      const wheelWorldViewProjection = M4.multiply(viewProjectionMatrix, wheelTransforms);
+      const wheelWorldInverseTranspose = M4.transpose(M4.inverse(wheelWorldMatrix));
+
+      // Uniforms para la rueda
+      let wheelUniforms = {
+        u_lightWorldPosition: sun.posArray,
+        u_viewWorldPosition: scene.camera.posArray,
+        u_ambientLight: sun.ambient,
+        u_diffuseLight: sun.diffuse,
+        u_specularLight: sun.specular,
+        u_sunIntensity: sunIntensity,
+        u_world: wheelWorldMatrix,
+        u_worldInverseTransform: wheelWorldInverseTranspose,
+        u_worldViewProjection: wheelWorldViewProjection,
+        u_specularColor: [1.0, 1.0, 1.0, 1.0],
+        u_shininess: 50.0,
+        u_numTrafficLights: totalLights,
+        u_numTrafficLightsOnly: trafficLights.length,
+        u_trafficLightPositions: allLightPositions,
+        u_trafficLightColors: allLightColors,
+        u_trafficLightIntensity: trafficLightIntensity,
+        u_streetLightIntensity: streetLightIntensity
+      };
+      twgl.setUniforms(programInfo, wheelUniforms);
+
+      gl.bindVertexArray(wheel.vao);
+      twgl.drawBufferInfo(gl, wheel.bufferInfo);
+    }
+  }
 }
 
 // Loop principal que dibuja todo en cada frame

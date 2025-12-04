@@ -534,4 +534,94 @@ function cubeSingleColor(size, color = [0.5, 0.5, 0.5, 1.0]) {
     return arrays;
 }
 
-export { shapeF, diamond, cubeFaceColors, cubeVertexColors, cubeTextured, car2D, cubeSingleColor };
+// Create a cylinder for wheels
+function cylinder(segments = 16, color = [0.1, 0.1, 0.1, 1.0]) {
+    const positions = [];
+    const normals = [];
+    const colors = [];
+    const indices = [];
+
+    // Radius 1, height 1 (from -0.5 to 0.5 on Y axis)
+    const radius = 1.0;
+    const halfHeight = 0.5;
+
+    // Generate vertices for the cylinder body
+    for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+
+        // Top vertex
+        positions.push(x, halfHeight, z);
+        normals.push(x, 0, z); // Normal points outward
+        colors.push(...color);
+
+        // Bottom vertex
+        positions.push(x, -halfHeight, z);
+        normals.push(x, 0, z);
+        colors.push(...color);
+    }
+
+    // Generate indices for the cylinder body (CCW winding from outside)
+    for (let i = 0; i < segments; i++) {
+        const topLeft = i * 2;
+        const topRight = (i + 1) * 2;
+        const bottomLeft = i * 2 + 1;
+        const bottomRight = (i + 1) * 2 + 1;
+
+        // Two triangles per segment - CCW order
+        indices.push(topLeft, topRight, bottomLeft);
+        indices.push(bottomLeft, topRight, bottomRight);
+    }
+
+    // Add top cap center
+    const topCenterIndex = positions.length / 3;
+    positions.push(0, halfHeight, 0);
+    normals.push(0, 1, 0);
+    colors.push(...color);
+
+    // Add top cap vertices
+    for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        positions.push(x, halfHeight, z);
+        normals.push(0, 1, 0);
+        colors.push(...color);
+    }
+
+    // Top cap indices - CCW from above
+    for (let i = 0; i < segments; i++) {
+        indices.push(topCenterIndex, topCenterIndex + 2 + i, topCenterIndex + 1 + i);
+    }
+
+    // Add bottom cap center
+    const bottomCenterIndex = positions.length / 3;
+    positions.push(0, -halfHeight, 0);
+    normals.push(0, -1, 0);
+    colors.push(...color);
+
+    // Add bottom cap vertices
+    for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        positions.push(x, -halfHeight, z);
+        normals.push(0, -1, 0);
+        colors.push(...color);
+    }
+
+    // Bottom cap indices - CCW from below
+    for (let i = 0; i < segments; i++) {
+        indices.push(bottomCenterIndex, bottomCenterIndex + 1 + i, bottomCenterIndex + 2 + i);
+    }
+
+    return {
+        a_position: { numComponents: 3, data: positions },
+        a_normal: { numComponents: 3, data: normals },
+        a_color: { numComponents: 4, data: colors },
+        indices: { numComponents: 3, data: indices }
+    };
+}
+
+export { shapeF, diamond, cubeFaceColors, cubeVertexColors, cubeTextured, car2D, cubeSingleColor, cylinder };
