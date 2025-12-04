@@ -49,18 +49,24 @@ def post_process(ax):
     ax.set_aspect("equal")
 
 
-@solara.component
-def MetricsDisplay(model):
-    """Component to display simulation metrics in real-time."""
-    # Create a card to display metrics
-    with solara.Card("Simulation Metrics", style={"margin": "10px", "padding": "15px"}):
-        solara.Markdown(f"""
-### Current Statistics:
-- **Total Cars Spawned:** {model.total_cars_spawned}
-- **Cars Reached Destination:** {model.cars_reached_destination}
-- **Current Cars in Simulation:** {model.current_cars_in_simulation}
-- **Current Step:** {model.steps}
+def make_metrics_display():
+    """Create a function component for metrics display that updates with model state."""
+    def MetricsDisplay(model):
+        # Access metrics - these will trigger re-render when model steps
+        total = model.total_cars_spawned
+        reached = model.cars_reached_destination
+        current = model.current_cars_in_simulation
+        step = model.steps
+
+        return solara.Markdown(f"""
+### Simulation Metrics
+- **Total Cars Spawned:** {total}
+- **Cars Reached Destination:** {reached}
+- **Current Cars in Simulation:** {current}
+- **Current Step:** {step}
         """)
+
+    return MetricsDisplay
 
 
 # Los nombres de las claves deben coincidir EXACTAMENTE con los parámetros del constructor
@@ -72,7 +78,7 @@ model_params = {
 # Crear el modelo inicial
 model = CityModel(
     N=model_params["N"].value,
-    spawn_interval=100,
+    spawn_interval=model_params["spawn_interval"].value,
     model_params=model_params
 )
 
@@ -87,7 +93,7 @@ space_component = make_space_component(
 # pero el modelo verifica spawn_interval en cada step() y se actualiza automáticamente
 page = SolaraViz(
     model,
-    components=[space_component, MetricsDisplay],
+    components=[space_component, make_metrics_display()],
     model_params=model_params,
     name="Traffic City",
 )
