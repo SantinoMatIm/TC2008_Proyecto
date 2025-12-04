@@ -45,16 +45,10 @@ async function initTrafficModel() {
             body: JSON.stringify(initData)
         });
 
-        // Check if the response was successful
         if (response.ok) {
-            // Parse the response as JSON and log the message
-            let result = await response.json();
-            console.log(result.message);
+            await response.json();
         }
-
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -76,8 +70,8 @@ async function getCars() {
                 // Create new cars and add them to the cars array
                 const initialCars = [];
                 for (const car of result.positions) {
-                    // Centrar en la celda escalada (3x3): posición * 3 + 1.5
-                    const newCar = new Object3D(car.id, [car.x * 3 + 1.5, car.y, car.z * 3 + 1.5]);
+                    // Centrar en la celda escalada (3x3): posición * 3 + 1.5, y=0 nivel del suelo
+                    const newCar = new Object3D(car.id, [car.x * 3 + 1.5, 0, car.z * 3 + 1.5]);
                     newCar['oldPosArray'] = newCar.posArray;
                     cars.push(newCar);
                     initialCars.push(newCar);
@@ -88,24 +82,45 @@ async function getCars() {
                     onNewCarsCallback(initialCars);
                 }
             } else {
-                // Update the positions of existing cars and add new ones
-                const existingCarIds = new Set(cars.map(c => c.id));
+                // Get IDs from server response
+                const serverCarIds = new Set(result.positions.map(c => c.id));
                 const newCars = [];
 
+                // Update existing cars and add new ones
                 for (const car of result.positions) {
                     const current_car = cars.find((object3d) => object3d.id == car.id);
 
                     // Check if the car exists in the cars array
                     if(current_car != undefined){
-                        // Update the car's position (ESCALADO 3x + centrado)
+                        // Update the car's position (ESCALADO 3x + centrado), y=0 nivel del suelo
                         current_car.oldPosArray = current_car.posArray;
-                        current_car.position = {x: car.x * 3 + 1.5, y: car.y, z: car.z * 3 + 1.5};
+                        current_car.position = {x: car.x * 3 + 1.5, y: 0, z: car.z * 3 + 1.5};
                     } else {
                         // This is a new car that was spawned, add it to the array (ESCALADO 3x + centrado)
-                        const newCar = new Object3D(car.id, [car.x * 3 + 1.5, car.y, car.z * 3 + 1.5]);
+                        const newCar = new Object3D(car.id, [car.x * 3 + 1.5, 0, car.z * 3 + 1.5]);
                         newCar['oldPosArray'] = newCar.posArray;
                         cars.push(newCar);
                         newCars.push(newCar);
+                    }
+                }
+
+                // Remove cars that are no longer in the server response (reached destination)
+                const carsToRemove = cars.filter(car => !serverCarIds.has(car.id));
+                for (const carToRemove of carsToRemove) {
+                    // Remove from cars array
+                    const index = cars.indexOf(carToRemove);
+                    if (index > -1) {
+                        cars.splice(index, 1);
+                    }
+                    // Remove from scene (if scene is available globally)
+                    if (window.scene) {
+                        window.scene.removeObject(carToRemove);
+                        // También eliminar las ruedas del coche
+                        if (carToRemove.wheels) {
+                            for (const wheel of carToRemove.wheels) {
+                                window.scene.removeObject(wheel);
+                            }
+                        }
                     }
                 }
 
@@ -117,8 +132,6 @@ async function getCars() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -143,8 +156,6 @@ async function getObstacles() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -183,8 +194,6 @@ async function getTrafficLights() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -209,8 +218,6 @@ async function getDestinations() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -236,8 +243,6 @@ async function getRoads() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -257,8 +262,6 @@ async function update() {
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 
@@ -276,13 +279,10 @@ async function setSpawnInterval(interval) {
 
         // Check if the response was successful
         if (response.ok) {
-            let result = await response.json();
-            console.log(result.message);
+            await response.json();
         }
 
     } catch (error) {
-        // Log any errors that occur during the request
-        console.log(error);
     }
 }
 

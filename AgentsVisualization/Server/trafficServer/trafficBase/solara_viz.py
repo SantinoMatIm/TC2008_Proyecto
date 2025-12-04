@@ -16,7 +16,7 @@ from trafficBase.model import CityModel
 
 
 def agent_portrayal(agent):
-    """Simple 2D portrayal to debug the traffic model."""
+    """Representación 2D de los agentes del modelo."""
     if agent is None:
         return
 
@@ -69,15 +69,11 @@ model_params = {
     "spawn_interval": Slider("Spawn interval (steps)", 10, 1, 50),
 }
 
-# HARDCODEADO para debug: spawnear un coche cada 100 steps
-SPAWN_INTERVAL_DEBUG = 100
-
-# Crear el modelo inicial, pasando model_params para actualización dinámica
-# El modelo verificará el valor de spawn_interval en cada step() y lo actualizará
+# Crear el modelo inicial
 model = CityModel(
     N=model_params["N"].value,
-    spawn_interval=SPAWN_INTERVAL_DEBUG,  # Hardcodeado a 100 para debug
-    model_params=model_params  # Pasar model_params para que el modelo pueda verificar los sliders
+    spawn_interval=100,
+    model_params=model_params
 )
 
 space_component = make_space_component(
@@ -93,7 +89,7 @@ page = SolaraViz(
     model,
     components=[space_component, MetricsDisplay],
     model_params=model_params,
-    name="Traffic City (Cars Debug)",
+    name="Traffic City",
 )
 
 
